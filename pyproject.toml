@@ -1,0 +1,15 @@
+[project]
+name = "csm-mlx"
+version = "0.0.1"
+description = "Implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mlx-lm>=0.22.0",
+    "mlx>=0.22.1",
+    "moshi-mlx",
+    "transformers>=4.48.3",
+]
+
+[tool.uv.sources]
+moshi-mlx = { git = "https://github.com/kyutai-labs/moshi", subdirectory = "moshi_mlx" }
