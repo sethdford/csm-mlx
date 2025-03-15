@@ -1,6 +1,6 @@
 [project]
 name = "csm-mlx"
-version = "0.0.1"
+version = "0.1.0"
 description = "Implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX."
 readme = "README.md"
 requires-python = ">=3.12"
