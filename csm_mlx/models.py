@@ -70,7 +70,7 @@ class CSM(nn.Module):
         self.backbone.embed_tokens = nn.Identity()  # type: ignore
         self.decoder.embed_tokens = nn.Identity()  # type: ignore
 
-        # Path attention
+        # Patch attention
         for layer in self.backbone.layers:
             layer.self_attn = Attention(BACKBONE_CONFIGURATION[args.backbone_name])  # type: ignore
         for layer in self.decoder.layers:
