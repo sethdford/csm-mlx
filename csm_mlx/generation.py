@@ -29,29 +29,29 @@ def generate_frame(
 
     backbone_embeds = model.embed_tokens(tokens)
     backbone_embeds = backbone_embeds * mx.expand_dims(token_mask, axis=-1)
-    backbone_embeds = backbone_embeds.sum(-2)
+    backbone_input = backbone_embeds.sum(-2)
 
     with mx.stream(stream):
-        hidden = model.backbone(backbone_embeds, cache=cache)
-        last_hidden = hidden[:, -1, :]
+        backbone_hidden = model.backbone(backbone_input, cache=cache)
+        backbone_last_hidden = backbone_hidden[:, -1, :]
 
-        c0_logits = model.codebook0_head(last_hidden)
+        c0_logits = model.codebook0_head(backbone_last_hidden)
         c0_sample = mx.expand_dims(sampler(c0_logits), axis=-1)
         c0_embeds = model.embed_audio(0, c0_sample)
 
         decoder_inputs = mx.concat(
-            [mx.expand_dims(last_hidden, axis=1), c0_embeds], axis=1
+            [mx.expand_dims(backbone_last_hidden, axis=1), c0_embeds], axis=1
         )
         decoder_sample = c0_sample
 
         decoder_cache = make_prompt_cache(model.decoder)
         for index in range(1, model.n_audio_codebooks):
-            activation = model.decoder(
+            decoder_hidden = model.decoder(
                 model.projection(decoder_inputs),
                 cache=decoder_cache,
             )
 
-            ci_logits = mx.matmul(activation[:, -1, :], model.audio_head[index - 1])
+            ci_logits = mx.matmul(decoder_hidden[:, -1, :], model.audio_head[index - 1])
             ci_sample = mx.expand_dims(sampler(ci_logits), axis=-1)
             ci_embeds = model.embed_audio(index, ci_sample)
 
@@ -87,6 +87,7 @@ def generate(
 
     prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int64)
     prompt_tokens_mask = mx.concat(tokens_mask, axis=0)
+
     samples = []
     input = mx.expand_dims(prompt_tokens, 0)
     mask = mx.expand_dims(prompt_tokens_mask, 0)
