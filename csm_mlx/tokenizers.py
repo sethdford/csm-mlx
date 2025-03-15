@@ -75,7 +75,7 @@ def tokenize_audio(
 
     audio_frame = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int64)
     audio_frame_mask = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int64)
-    audio_frame[:, :-1] = audio_tokens.transpose(0, 1)
+    audio_frame[:, :-1] = audio_tokens.swapaxes(0, 1)
     audio_frame_mask[:, :-1] = True
 
     frame_tokens.append(audio_frame)
