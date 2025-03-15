@@ -86,12 +86,12 @@ def generate(
     prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int64)
     prompt_tokens_mask = mx.concat(tokens_mask, axis=0)
     samples = []
-    sampled_tokens = mx.expand_dims(prompt_tokens, 0)
+    input = mx.expand_dims(prompt_tokens, 0)
     mask = mx.expand_dims(prompt_tokens_mask, 0)
     backbone_cache = make_prompt_cache(model.backbone)
 
     max_seq_len = 2048 - max_audio_frames
-    if sampled_tokens.shape[1] >= max_seq_len:
+    if input.shape[1] >= max_seq_len:
         raise ValueError(
             f"Inputs too long, must be below max_seq_len - max_audio_frames: {max_seq_len}"
         )
@@ -99,20 +99,20 @@ def generate(
     for _ in range(max_audio_frames):
         sample = generate_frame(
             model,
-            sampled_tokens,
+            input,
             sampler=sampler,
             token_mask=mask,
             cache=backbone_cache,
         )
 
-        if sampled_tokens.sum() == 0:
+        if sample.sum() == 0:
             break  # eos
 
         samples.append(sample)
 
-        sampled_tokens = mx.expand_dims(
-            mx.concat([sample, mx.zeros((1, 1))], axis=1), 1
-        ).astype(mx.int64)
+        input = mx.expand_dims(mx.concat([sample, mx.zeros((1, 1))], axis=1), 1).astype(
+            mx.int64
+        )
         mask = mx.expand_dims(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
         )
