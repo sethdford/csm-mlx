@@ -12,7 +12,7 @@ from csm_mlx.tokenizers import (
     tokenize_text_segment,
 )
 
-generation_stream = mx.new_stream(mx.default_device())
+default_stream = mx.new_stream(mx.default_device())
 
 
 def generate_frame(
@@ -22,7 +22,7 @@ def generate_frame(
     token_mask: Optional[mx.array] = None,
     sampler: Optional[Callable[..., mx.array]] = None,
     cache: Optional[Any] = None,
-    stream: mx.Stream = generation_stream,
+    stream: mx.Stream = default_stream,
 ) -> mx.array:
     sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
     token_mask = token_mask if token_mask is not None else mx.ones_like(tokens)
@@ -69,7 +69,7 @@ def generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
-    stream: mx.Stream = generation_stream,
+    stream: mx.Stream = default_stream,
 ) -> mx.array:
     max_audio_frames = int(max_audio_length_ms / 80)
 
@@ -142,7 +142,7 @@ def stream_generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
-    stream: mx.Stream = generation_stream,
+    stream: mx.Stream = default_stream,
 ) -> Generator[mx.array, None, None]:
     max_audio_frames = int(max_audio_length_ms / 80)
 
