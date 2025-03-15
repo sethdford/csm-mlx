@@ -98,7 +98,7 @@ def tokenize_segment(
 
     return mx.concat([text_tokens, audio_tokens], axis=0).astype(mx.int64), mx.concat(
         [text_masks, audio_masks], axis=0
-    ).astype(mx.bool_)
+    ).astype(mx.bool_)  # type: ignore
 
 
 def decode_audio(audio_tokens: mx.array, *, n_audio_codebooks=32) -> mx.array:
