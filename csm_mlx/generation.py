@@ -22,6 +22,7 @@ def generate_frame(
     token_mask: Optional[mx.array] = None,
     sampler: Optional[Callable[..., mx.array]] = None,
     cache: Optional[Any] = None,
+    stream: mx.Stream = generation_stream,
 ) -> mx.array:
     sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
     token_mask = token_mask if token_mask is not None else mx.ones_like(tokens)
@@ -30,7 +31,7 @@ def generate_frame(
     backbone_embeds = backbone_embeds * mx.expand_dims(token_mask, axis=-1)
     backbone_embeds = backbone_embeds.sum(-2)
 
-    with mx.stream(generation_stream):
+    with mx.stream(stream):
         hidden = model.backbone(backbone_embeds, cache=cache)
         last_hidden = hidden[:, -1, :]
 
@@ -68,6 +69,7 @@ def generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
+    stream: mx.Stream = generation_stream,
 ) -> mx.array:
     max_audio_frames = int(max_audio_length_ms / 80)
 
@@ -103,6 +105,7 @@ def generate(
             sampler=sampler,
             token_mask=mask,
             cache=backbone_cache,
+            stream=stream,
         )
 
         if sample.sum() == 0:
@@ -139,6 +142,7 @@ def stream_generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
+    stream: mx.Stream = generation_stream,
 ) -> Generator[mx.array, None, None]:
     max_audio_frames = int(max_audio_length_ms / 80)
 
@@ -174,6 +178,7 @@ def stream_generate(
             sampler=sampler,
             token_mask=mask,
             cache=backbone_cache,
+            stream=stream,
         )
 
         if sample.sum() == 0:
