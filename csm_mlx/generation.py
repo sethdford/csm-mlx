@@ -160,7 +160,7 @@ def stream_generate(
 
     prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int64)
     prompt_tokens_mask = mx.concat(tokens_mask, axis=0)
-    samples = []
+
     input = mx.expand_dims(prompt_tokens, 0)
     mask = mx.expand_dims(prompt_tokens_mask, 0)
     backbone_cache = make_prompt_cache(model.backbone)
@@ -184,8 +184,6 @@ def stream_generate(
         if sample.sum() == 0:
             break  # eos
 
-        samples.append(sample)
-
         input = mx.expand_dims(mx.concat([sample, mx.zeros((1, 1))], axis=1), 1).astype(
             mx.int64
         )
@@ -195,10 +193,10 @@ def stream_generate(
 
         decoded = (
             decode_audio(
-                mx.stack(samples).transpose(1, 2, 0),
+                mx.expand_dims(sample, 0).transpose(1, 2, 0),
                 n_audio_codebooks=model.n_audio_codebooks,
             )
             .squeeze(0)
             .squeeze(0)
         )
-        yield decoded[decoded.shape[0] // len(samples) :]
+        yield decoded
