@@ -96,9 +96,9 @@ def tokenize_segment(
         segment.audio, n_audio_codebooks=n_audio_codebooks
     )
 
-    return mx.concat([text_tokens, audio_tokens], axis=0), mx.concat(
+    return mx.concat([text_tokens, audio_tokens], axis=0).astype(mx.int64), mx.concat(
         [text_masks, audio_masks], axis=0
-    )
+    ).astype(mx.bool_)
 
 
 def decode_audio(audio_tokens: mx.array, *, n_audio_codebooks=32) -> mx.array:

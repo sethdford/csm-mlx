@@ -118,7 +118,7 @@ def generate(
         )
         mask = mx.expand_dims(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
-        )
+        ).astype(mx.bool_)
 
     audio = (
         decode_audio(
