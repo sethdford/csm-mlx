@@ -2,8 +2,6 @@
 
 Implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
-> **Note**: There is an issue with RoPE, which currently introduces errors into the generated output. I'll fix it soon!
-
 ## Installation
 
 Recommendation: Use [`uv`](https://docs.astral.sh/uv/) to install it. It's truly magical.
@@ -88,7 +86,7 @@ audio = generate(
 
 ## Todo
 
-- [ ] Fix up RoPE
+- [X] Fix up RoPE
 - [ ] Implement watermarking
 - [ ] Add streaming generation
 - [ ] Optimize performance futher for real-time inference
