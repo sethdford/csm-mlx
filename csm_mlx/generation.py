@@ -95,9 +95,8 @@ def generate(
         raise ValueError(
             f"Inputs too long, must be below max_seq_len - max_audio_frames: {max_seq_len}"
         )
-    from tqdm import tqdm
 
-    for _ in tqdm(range(max_audio_frames)):
+    for _ in range(max_audio_frames):
         sample = generate_frame(
             model,
             sampled_tokens,
