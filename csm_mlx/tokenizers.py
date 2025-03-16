@@ -25,7 +25,7 @@ def get_text_tokenizer() -> LlamaTokenizer:
     """
     https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
     """
-    tokenizer = AutoTokenizer.from_pretrained(**TOKENIZERS["text"])
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZERS["text"]["repo_id"])
     bos = tokenizer.bos_token
     eos = tokenizer.eos_token
     tokenizer._tokenizer.post_processor = TemplateProcessing(
