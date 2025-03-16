@@ -7,9 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "mlx-lm>=0.22.0",
     "mlx>=0.22.1",
-    "moshi-mlx",
+    "moshi-mlx @ git+https://github.com/kyutai-labs/moshi.git#subdirectory=moshi_mlx",
     "transformers>=4.48.3",
 ]
-
-[tool.uv.sources]
-moshi-mlx = { git = "https://github.com/kyutai-labs/moshi", subdirectory = "moshi_mlx" }
