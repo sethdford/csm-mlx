@@ -16,26 +16,76 @@ app = typer.Typer(no_args_is_help=True)
 
 @app.command("generate")
 def generate_command(
-    text: str,
-    output: Annotated[Path, typer.Option("--output", "-o")],
-    model: Annotated[Models, typer.Option("--model", "-m")] = Models._1b,
-    speaker: Annotated[int, typer.Option("--speaker", "-s")] = 0,
-    max_audio_length: Annotated[int, typer.Option("--max-audio-length", "-l")] = 10000,
-    temperature: Annotated[float, typer.Option("--temperature", "--temp", "-t")] = 0.8,
-    top_p: Annotated[float | None, typer.Option("--top-p", "-p")] = None,
-    min_p: Annotated[float | None, typer.Option("--min-p", "-m")] = 0.05,
-    top_k: Annotated[int | None, typer.Option("--top-k", "-k")] = None,
-    min_tokens_to_keep: Annotated[int, typer.Option("--min-tokens-to-keep", "-kt")] = 1,
+    text: Annotated[
+        str,
+        typer.Option(
+            prompt="Please enter the text to generate:",
+            help="The text to convert to speech",
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            prompt="Please specify the output path:",
+            help="Output audio file path",
+        ),
+    ],
+    model: Annotated[
+        Models, typer.Option("--model", "-m", help="Model size")
+    ] = Models._1b,
+    speaker: Annotated[
+        int,
+        typer.Option(
+            "--speaker",
+            "-s",
+            help="Speaker ID to generate (relevant if you're feeding the model previous context)",
+        ),
+    ] = 0,
+    max_audio_length: Annotated[
+        int,
+        typer.Option(
+            "--max-audio-length", "-l", help="Maximum audio length in miliseconds"
+        ),
+    ] = 10000,
+    temperature: Annotated[
+        float,
+        typer.Option("--temperature", "--temp", "-t", help="Sampling temperature"),
+    ] = 0.8,
+    top_p: Annotated[
+        float | None, typer.Option("--top-p", "-p", help="Top-p sampling parameter")
+    ] = None,
+    min_p: Annotated[
+        float | None, typer.Option("--min-p", "-m", help="Min-p sampling parameter")
+    ] = 0.05,
+    top_k: Annotated[
+        int | None, typer.Option("--top-k", "-k", help="Top-k sampling parameter")
+    ] = None,
+    min_tokens_to_keep: Annotated[
+        int,
+        typer.Option(
+            "--min-tokens-to-keep",
+            "-kt",
+            help="Minimum tokens to keep during sampling",
+        ),
+    ] = 1,
     input_speakers: Annotated[
-        list[int] | None, typer.Option("--input-speakers", "-is")
+        list[int] | None,
+        typer.Option("--input-speakers", "-is", help="List of speaker IDs for context"),
     ] = None,
     input_audios: Annotated[
-        list[Path] | None, typer.Option("--input-audios", "-ia")
+        list[Path] | None,
+        typer.Option("--input-audios", "-ia", help="List of audio files for context"),
     ] = None,
     input_texts: Annotated[
-        list[str] | None, typer.Option("--input-texts", "-it")
+        list[str] | None,
+        typer.Option(
+            "--input-texts", "-it", help="List of text transcripts for context"
+        ),
     ] = None,
 ):
+    """Generate speech from text using CSM(Conversational Speech Model)."""
     input_audios = input_audios or []
     input_texts = input_texts or []
     input_speakers = input_speakers or []
