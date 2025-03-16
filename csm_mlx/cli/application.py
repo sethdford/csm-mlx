@@ -14,7 +14,7 @@ from csm_mlx.cli.utils import read_audio, write_audio
 app = typer.Typer(no_args_is_help=True)
 
 
-@app.command(name="generate")
+@app.command("generate")
 def generate_command(
     text: str,
     output: Annotated[Path, typer.Option("--output", "-o")],

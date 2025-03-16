@@ -10,7 +10,7 @@ class Models(str, Enum):
 MODEL = {
     "1b": {
         "loader": {
-            "repo_id": "senstella/senstella/csm-1b-mlx",
+            "repo_id": "senstella/csm-1b-mlx",
             "filename": "ckpt.safetensors",
         },
         "config": csm_1b(),
