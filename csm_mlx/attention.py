@@ -149,11 +149,7 @@ class Llama3ScaledRoPE(nn.Module):
         seq_len = x.shape[1]
 
         # extract the values based on whether input_pos is set or not
-        rope_cache = (
-            self._cache[:seq_len]
-            if offset is None
-            else self._cache[None, offset : offset + seq_len]
-        )
+        rope_cache = self._cache[None, offset : offset + seq_len]
 
         # reshape input; the last dimension is used for computing the output.
         # Cast to float to match the reference implementation
@@ -215,38 +211,24 @@ class Attention(nn.Module):
         cache: Optional[Any] = None,
     ) -> mx.array:
         b, s_x, _ = x.shape
-        y = x
 
-        s_y = y.shape[1] if y is not None else 0
-
-        # q has shape [b, s_x, num_heads * head_dim]
+        # q, k, v has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
 
         # number of queries per key/value
-        q_per_kv = self.n_heads // self.n_kv_heads
-        q = q.reshape(b, s_x, self.n_kv_heads * q_per_kv, self.head_dim)
+        q = q.reshape(b, s_x, -1, self.head_dim)
+        k = k.reshape(b, s_x, -1, self.head_dim)
+        v = v.reshape(b, s_x, -1, self.head_dim)
 
         # Apply positional embeddings
         if self.rope is not None:
             q = self.rope(q, offset=cache.offset if cache else 0)
+            k = self.rope(k, offset=cache.offset if cache else 0)
 
         # [b, n_h, s_x, h_d]
         q = q.swapaxes(1, 2)
-
-        # Update k and v shape, positional embeddings, and normalization
-
-        # k,v shape [b, s_y, num_kv_heads * head_dim]
-        k = self.k_proj(y)
-        v = self.v_proj(y)
-
-        # Apply positional embeddings
-        # k,v shape: [b, s_y, n_kv, h_d]
-        k = k.reshape(b, s_y, -1, self.head_dim)
-        v = v.reshape(b, s_y, -1, self.head_dim)
-        if self.rope is not None:
-            k = self.rope(k, offset=cache.offset if cache else 0)
-
-        # k,v shape: [b, n_kv, s_y, h_d]
         k = k.swapaxes(1, 2)
         v = v.swapaxes(1, 2)
 
