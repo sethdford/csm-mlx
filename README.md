@@ -87,12 +87,12 @@ audio = generate(
 If you want to load an audio for a segment, you need to resample it.
 
 ```python
-import soundfile as sf
-import librosa
+import audiofile
+import audresample
 
-def load_audio(audio_path):
-    data, sample_rate = sf.load(audio_path)
-    data = librosa.resample(data, orig_sr=sample_rate, target_sr=24000)
+def load_audio(audio_path, sample_rate=24000):
+    data, orig_sample_rate = audiofile.load(audio_path)
+    data = audresample.resample(signal, orig_sample_rate, sample_rate)
     return mx.array(data)
 ```
 
