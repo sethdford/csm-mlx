@@ -11,7 +11,7 @@ requires-python = ">=3.10, <3.13"
 dependencies = [
     "mlx-lm>=0.22.0",
     "mlx>=0.22.1",
-    "moshi-mlx @ git+https://github.com/kyutai-labs/moshi.git#subdirectory=moshi_mlx",
+    "moshi-mlx>=0.2.2",
     "transformers>=4.48.3",
 ]
 
