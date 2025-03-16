@@ -2,6 +2,18 @@
 
 An implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
+## Installation
+
+Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
+```bash
+uv add git+https://github.com/senstella/csm-mlx
+```
+
+Or, you can install it via pip:
+```bash
+pip install git+https://github.com/senstella/csm-mlx
+```
+
 ## Usage
 
 ### Basic generation
@@ -160,19 +172,6 @@ csm-mlx [TEXT] [OPTIONS]
 - `-is, --input-speakers LIST`: List of speaker IDs for context
 - `-ia, --input-audios LIST`: List of audio files for context
 - `-it, --input-texts LIST`: List of text transcripts for context
-
-## Installation
-
-Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
-```bash
-uv add git+https://github.com/senstella/csm-mlx
-```
-
-Or, you can install it via pip:
-```bash
-pip install git+https://github.com/senstella/csm-mlx
-```
-
 
 ## Todo
 
