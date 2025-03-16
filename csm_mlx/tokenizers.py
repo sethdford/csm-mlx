@@ -13,7 +13,7 @@ from csm_mlx.segment import Segment
 @cache
 def get_audio_tokenizer(n_audio_codebooks: int) -> Mimi:
     mimi = Mimi(mimi_202407(n_audio_codebooks))
-    weight = hf_hub_download(TOKENIZERS["audio"]["repo"], TOKENIZERS["audio"]["file"])
+    weight = hf_hub_download(**TOKENIZERS["audio"])  # type: ignore
 
     mimi.load_pytorch_weights(weight)
 
@@ -25,7 +25,7 @@ def get_text_tokenizer() -> LlamaTokenizer:
     """
     https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
     """
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZERS["text"]["repo"])
+    tokenizer = AutoTokenizer.from_pretrained(**TOKENIZERS["text"])
     bos = tokenizer.bos_token
     eos = tokenizer.eos_token
     tokenizer._tokenizer.post_processor = TemplateProcessing(
