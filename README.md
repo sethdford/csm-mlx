@@ -34,7 +34,7 @@ audio = generate(
     speaker=0,
     context=[],
     max_audio_length_ms=10_000,
-    sampler=make_sampler(temp=0.5, min_p=0.1), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
+    sampler=make_sampler(temp=0.8, min_p=0.05), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
     # Additionally, you can provide `stream` argument to specify what device to use for generation.
     # https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
 )
@@ -80,6 +80,20 @@ audio = generate(
     max_audio_length_ms=5_000
     # If you don't provide any sampler, greedy sampling will be used.
 )
+```
+
+### Loading audio for a segment
+
+If you want to load an audio for a segment, you need to resample it.
+
+```python
+import soundfile as sf
+import librosa
+
+def load_audio(audio_path):
+    data, sample_rate = sf.load(audio_path)
+    data = librosa.resample(data, orig_sr=sample_rate, target_sr=24000)
+    return mx.array(data)
 ```
 
 ## Todo
