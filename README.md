@@ -183,6 +183,7 @@ csm-mlx [TEXT] [OPTIONS]
 ## Acknowledgments
 
 - Thanks to [Sesame](https://sesame.com) for [original PyTorch implementation](https://github.com/SesameAILabs/csm) and [weights](https://huggingface.co/sesame/csm-1b)!
+- Thanks to [Moshi](https://github.com/kyutai-labs/moshi) project for creating the mimi codec and `mimi_mlx` implementation.
 - Thanks to [torchtune](https://github.com/pytorch/torchtune) project for providing LLaMA attention implementation.
 - Thanks to [MLX](https://github.com/ml-explore/mlx) project for providing the framework that made this implementation possible.
 - Thanks to [typer](https://typer.tiangolo.com) for powering the CLI interface.
