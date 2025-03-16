@@ -93,7 +93,7 @@ import audresample
 def load_audio(audio_path, sample_rate=24000):
     data, orig_sample_rate = audiofile.load(audio_path)
     data = audresample.resample(signal, orig_sample_rate, sample_rate)
-    return mx.array(data)
+    return mx.array(data.squeeze())
 ```
 
 ## CLI
