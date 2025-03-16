@@ -19,7 +19,7 @@ def generate_command(
     text: Annotated[
         str,
         typer.Option(
-            prompt="Please enter the text to generate:",
+            prompt="Please enter the text to generate",
             help="The text to convert to speech",
         ),
     ],
@@ -28,7 +28,7 @@ def generate_command(
         typer.Option(
             "--output",
             "-o",
-            prompt="Please specify the output path:",
+            prompt="Please specify the output path",
             help="Output audio file path",
         ),
     ],
