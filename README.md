@@ -2,18 +2,6 @@
 
 An implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
-## Installation
-
-Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
-```bash
-uv add git+https://github.com/senstella/csm-mlx
-```
-
-Or, you can install it via pip:
-```bash
-pip install git+https://github.com/senstella/csm-mlx
-```
-
 ## Usage
 
 ### Basic generation
@@ -96,6 +84,96 @@ def load_audio(audio_path):
     return mx.array(data)
 ```
 
+## CLI
+
+### Installation
+
+```bash
+# Recommendation: uv tools - works best!
+uv tool install "git+https://github.com/senstella/csm-mlx[cli]"
+
+# Or with pipx
+pipx install "git+https://github.com/senstella/csm-mlx[cli]"
+```
+
+### Usage
+
+#### Basic Text-to-Speech
+
+```bash
+csm-mlx "Hello from Sesame." -o output.wav
+```
+
+#### With Options
+
+```bash
+csm-mlx "Hello from Sesame." \
+  --output output.wav \
+  --model 1b \
+  --speaker 0 \
+  --temperature 0.8 \
+  --min-p 0.05 \
+  --max-audio-length 10000
+```
+
+#### Feeding Contexts
+
+You can provide conversation context to make the generated speech more natural — or clone a voice with it.
+
+You must provide audio & text & speaker in the pair.
+
+```bash
+csm-mlx "Nice to meet you too!" \
+  --output response.wav \
+  --input-audios previous.wav \
+  --input-texts "Hello, nice to meet you." \
+  --input-speakers 1
+```
+
+#### Portable with uv
+
+```bash
+uv run --with 'git+https://github.com/senstella/csm-mlx[cli]' --python 3.12 python -m csm_mlx "Hello from Sesame." -o output.wav
+```
+
+### CLI Reference
+
+```
+csm-mlx [TEXT] [OPTIONS]
+```
+
+#### Arguments
+
+- `TEXT`: The text to convert to speech
+
+#### Options
+
+- `-o, --output PATH`: Output audio file path [required]
+- `-m, --model [1b]`: Model size (default: 1b)
+- `-s, --speaker INT`: Speaker ID (default: 0)
+- `-l, --max-audio-length INT`: Maximum audio length in milliseconds (default: 10000 — 10 seconds)
+- `-t, --temperature, --temp FLOAT`: Sampling temperature (default: 0.8)
+- `-p, --top-p FLOAT`: Top-p sampling parameter
+- `-m, --min-p FLOAT`: Minimum probability for sampling (default: 0.05)
+- `-k, --top-k INT`: Top-k sampling parameter
+- `-kt, --min-tokens-to-keep INT`: Minimum tokens to keep during sampling (default: 1)
+- `-is, --input-speakers LIST`: List of speaker IDs for context
+- `-ia, --input-audios LIST`: List of audio files for context
+- `-it, --input-texts LIST`: List of text transcripts for context
+
+## Installation
+
+Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
+```bash
+uv add git+https://github.com/senstella/csm-mlx
+```
+
+Or, you can install it via pip:
+```bash
+pip install git+https://github.com/senstella/csm-mlx
+```
+
+
 ## Todo
 
 - [X] Fix up RoPE
@@ -108,6 +186,8 @@ def load_audio(audio_path):
 - Thanks to [Sesame](https://sesame.com) for [original PyTorch implementation](https://github.com/SesameAILabs/csm) and [weights](https://huggingface.co/sesame/csm-1b)!
 - Thanks to [torchtune](https://github.com/pytorch/torchtune) project for providing LLaMA attention implementation.
 - Thanks to [MLX](https://github.com/ml-explore/mlx) project for providing the framework that made this implementation possible.
+- Thanks to [typer](https://typer.tiangolo.com) for powering the CLI interface.
+- Thanks to [audiofile](https://github.com/audeering/audiofile) and [audresample](https://github.com/audeering/audresample) for audio processing.
 
 ## License
 
