@@ -47,7 +47,7 @@ DECODER_CONFIGURATION = {
 TOKENIZERS = {
     "audio": {
         "repo_id": "kyutai/moshiko-pytorch-bf16",
-        "file": "tokenizer-e351c8d8-checkpoint125.safetensors",
+        "filename": "tokenizer-e351c8d8-checkpoint125.safetensors",
     },
     "text": {"repo_id": "unsloth/Llama-3.2-1B"},
 }
