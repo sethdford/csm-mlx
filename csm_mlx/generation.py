@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, Generator, Optional
+from typing import Any, Generator, List, Optional
 
 import mlx.core as mx
 from mlx_lm.models.cache import make_prompt_cache
@@ -22,8 +22,10 @@ def generate_frame(
     *,
     token_mask: Optional[mx.array] = None,
     sampler: Optional[Callable[..., mx.array]] = None,
+    logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     cache: Optional[Any] = None,
     stream: mx.Stream = default_stream,
+    c0_history: Optional[list[mx.array]] = None,  # Required if doing logit processing
 ) -> mx.array:
     sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
     token_mask = token_mask if token_mask is not None else mx.ones_like(tokens)
@@ -37,8 +39,20 @@ def generate_frame(
         backbone_last_hidden = backbone_hidden[:, -1, :]
 
         c0_logits = model.codebook0_head(backbone_last_hidden)
-        c0_sample = mx.expand_dims(sampler(c0_logits), axis=-1)
+
+        if logits_processors:
+            for processor in logits_processors:
+                c0_logits = processor(
+                    mx.stack(c0_history, 0) if c0_history else mx.zeros((0)),
+                    c0_logits,
+                )
+
+        c0_logprobs = c0_logits - mx.logsumexp(c0_logits, keepdims=True)
+        c0_sample = mx.expand_dims(sampler(c0_logprobs), axis=-1)
         c0_embeds = model.embed_audio(0, c0_sample)
+
+        if c0_history is not None:
+            c0_history.append(c0_sample)
 
         decoder_inputs = mx.concat(
             [mx.expand_dims(backbone_last_hidden, axis=1), c0_embeds], axis=1
@@ -56,7 +70,8 @@ def generate_frame(
             )
 
             ci_logits = mx.matmul(decoder_hidden[:, -1, :], model.audio_head[index - 1])
-            ci_sample = mx.expand_dims(sampler(ci_logits), axis=-1)
+            ci_logprobs = ci_logits - mx.logsumexp(ci_logits, keepdims=True)
+            ci_sample = mx.expand_dims(sampler(ci_logprobs), axis=-1)
             ci_embeds = model.embed_audio(index, ci_sample)
 
             decoder_inputs = ci_embeds
@@ -73,6 +88,7 @@ def generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
+    logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     stream: mx.Stream = default_stream,
 ) -> mx.array:
     max_audio_frames = int(max_audio_length_ms / 80)
@@ -95,7 +111,9 @@ def generate(
     samples = []
     input = mx.expand_dims(prompt_tokens, 0)
     mask = mx.expand_dims(prompt_tokens_mask, 0)
+
     backbone_cache = make_prompt_cache(model.backbone)
+    c0_history = []
 
     max_seq_len = 2048 - max_audio_frames
     if input.shape[1] >= max_seq_len:
@@ -108,9 +126,11 @@ def generate(
             model,
             input,
             sampler=sampler,
+            logits_processors=logits_processors,
             token_mask=mask,
             cache=backbone_cache,
             stream=stream,
+            c0_history=c0_history,
         )
 
         if not sample.any():
@@ -147,6 +167,7 @@ def stream_generate(
     max_audio_length_ms: float = 90_000,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
+    logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     stream: mx.Stream = default_stream,
 ) -> Generator[mx.array, None, None]:
     max_audio_frames = int(max_audio_length_ms / 80)
@@ -168,7 +189,9 @@ def stream_generate(
 
     input = mx.expand_dims(prompt_tokens, 0)
     mask = mx.expand_dims(prompt_tokens_mask, 0)
+
     backbone_cache = make_prompt_cache(model.backbone)
+    c0_history = []
 
     max_seq_len = 2048 - max_audio_frames
     if input.shape[1] >= max_seq_len:
@@ -184,9 +207,11 @@ def stream_generate(
             model,
             input,
             sampler=sampler,
+            logits_processors=logits_processors,
             token_mask=mask,
             cache=backbone_cache,
             stream=stream,
+            c0_history=c0_history,
         )
 
         if not sample.any():
