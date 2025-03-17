@@ -8,6 +8,7 @@ from csm_mlx.models import CSM
 from csm_mlx.segment import Segment
 from csm_mlx.tokenizers import (
     decode_audio,
+    get_audio_tokenizer,
     tokenize_segment,
     tokenize_text_segment,
 )
@@ -172,6 +173,9 @@ def stream_generate(
             f"Inputs too long, must be below max_seq_len - max_audio_frames: {max_seq_len}"
         )
 
+    audio_tokenizer = get_audio_tokenizer()
+    audio_tokenizer.reset_state()
+
     for _ in range(max_audio_frames):
         sample = generate_frame(
             model,
@@ -192,12 +196,4 @@ def stream_generate(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
         )
 
-        decoded = (
-            decode_audio(
-                mx.expand_dims(sample, 0).transpose(1, 2, 0),
-                n_audio_codebooks=model.n_audio_codebooks,
-            )
-            .squeeze(0)
-            .squeeze(0)
-        )
-        yield decoded
+        yield audio_tokenizer.decode_step(mx.expand_dims(sample.transpose(1, 0), 2))
