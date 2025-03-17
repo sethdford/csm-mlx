@@ -110,7 +110,7 @@ def generate(
             stream=stream,
         )
 
-        if sample.sum() == 0:
+        if not sample.any():
             break  # eos
 
         samples.append(sample)
@@ -186,7 +186,7 @@ def stream_generate(
             stream=stream,
         )
 
-        if sample.sum() == 0:
+        if not sample.any():
             break  # eos
 
         input = mx.expand_dims(mx.concat([sample, mx.zeros((1, 1))], axis=1), 1).astype(
