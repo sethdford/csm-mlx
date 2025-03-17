@@ -40,7 +40,7 @@ audio = generate(
     speaker=0,
     context=[],
     max_audio_length_ms=10_000,
-    sampler=make_sampler(temp=0.8, min_p=0.05), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
+    sampler=make_sampler(temp=0.8, top_k=50), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
     # Additionally, you can provide `stream` argument to specify what device to use for generation.
     # https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
 )
