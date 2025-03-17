@@ -119,6 +119,32 @@ audio = generate(
 audiofile.write("./audio.wav", np.asarray(audio), 24000)
 ```
 
+### Streaming generation
+
+```python
+from mlx import nn
+from mlx_lm.sample_utils import make_sampler
+from csm_mlx import CSM, csm_1b
+from csm_mlx.generation import stream_generate
+
+# Initialize model
+csm = CSM(csm_1b())
+csm.load_weights("ckpt.safetensors", strict=True)
+
+# nn.quantize(csm) — Speed up nearly real-time on M2 Air, but loses quality.
+
+# Stream generate audio chunks
+for chunk in stream_generate(
+    csm,
+    text="This is an example of streaming audio generation.",
+    speaker=0,
+    context=[],
+    max_audio_length_ms=5000,
+    sampler=make_sampler(temp=0.8, min_p=0.05),
+):
+    # Process each chunk as it's generated
+```
+
 ### Loading audio for a segment
 
 If you want to load an audio for a segment, you need to resample it to 24000.
@@ -225,7 +251,7 @@ csm-mlx [TEXT] [OPTIONS]
 
 - [X] Fix up RoPE
 - [ ] Implement watermarking
-- [ ] Add streaming generation
+- [X] Add streaming generation
 - [ ] Optimize performance further for real-time inference
 
 ## Acknowledgments

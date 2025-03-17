@@ -43,7 +43,10 @@ def generate_frame(
         decoder_inputs = mx.concat(
             [mx.expand_dims(backbone_last_hidden, axis=1), c0_embeds], axis=1
         )
-        decoder_sample = c0_sample
+        decoder_sample = mx.zeros(
+            (tokens.shape[0], model.n_audio_codebooks), dtype=tokens.dtype
+        )
+        decoder_sample[:, :1] = c0_sample
 
         decoder_cache = make_prompt_cache(model.decoder)
         for index in range(1, model.n_audio_codebooks):
@@ -57,7 +60,7 @@ def generate_frame(
             ci_embeds = model.embed_audio(index, ci_sample)
 
             decoder_inputs = ci_embeds
-            decoder_sample = mx.concat([decoder_sample, ci_sample], axis=1)
+            decoder_sample[:, index : index + 1] = ci_sample
 
     return decoder_sample
 
@@ -173,7 +176,7 @@ def stream_generate(
             f"Inputs too long, must be below max_seq_len - max_audio_frames: {max_seq_len}"
         )
 
-    audio_tokenizer = get_audio_tokenizer()
+    audio_tokenizer = get_audio_tokenizer(n_audio_codebooks=model.n_audio_codebooks)
     audio_tokenizer.reset_state()
 
     for _ in range(max_audio_frames):
@@ -196,4 +199,13 @@ def stream_generate(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
         )
 
-        yield audio_tokenizer.decode_step(mx.expand_dims(sample.transpose(1, 0), 2))
+        with mx.stream(stream):
+            yield (
+                audio_tokenizer.decode_step(
+                    mx.expand_dims(sample, 0).transpose(1, 2, 0)
+                )
+                .squeeze(0)
+                .squeeze(0)
+            )
+
+    audio_tokenizer.reset_state()
