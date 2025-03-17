@@ -83,6 +83,42 @@ audio = generate(
 )
 ```
 
+### Speed up via quantization
+
+```python
+from mlx import nn
+from mlx_lm.sample_utils import make_sampler
+from huggingface_hub import hf_hub_download
+from csm_mlx import CSM, csm_1b, generate
+
+import audiofile
+import numpy as np
+
+# Initialize the model
+csm = CSM(csm_1b())  # csm_1b() is a configuration for the CSM model.
+weight = hf_hub_download(repo_id="senstella/csm-1b-mlx", filename="ckpt.safetensors")
+csm.load_weights(weight)
+
+# Quantize
+# If you want, specify the `group_size`, `bits`.
+# https://ml-explore.github.io/mlx/build/html/python/_autosummary/mlx.core.quantize.html
+nn.quantize(csm)
+
+# Generate audio from text
+audio = generate(
+    csm,
+    text="Hello from Sesame.",
+    speaker=0,
+    context=[],
+    max_audio_length_ms=10_000,
+    sampler=make_sampler(temp=0.8, min_p=0.05), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
+    # Additionally, you can provide `stream` argument to specify what device to use for generation.
+    # https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
+)
+
+audiofile.write("./audio.wav", np.asarray(audio), 24000)
+```
+
 ### Loading audio for a segment
 
 If you want to load an audio for a segment, you need to resample it to 24000.
