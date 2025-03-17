@@ -87,7 +87,7 @@ audio = generate(
 
 ```python
 from mlx import nn
-from mlx_lm.sample_utils import make_sampler
+from mlx_lm.sample_utils import make_sampler make_logits_processors
 from huggingface_hub import hf_hub_download
 from csm_mlx import CSM, csm_1b, generate
 
@@ -111,7 +111,9 @@ audio = generate(
     speaker=0,
     context=[],
     max_audio_length_ms=10_000,
-    sampler=make_sampler(temp=0.8, min_p=0.05), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
+    sampler=make_sampler(temp=0.8, top_k=50), # Put mlx_lm's sampler here! Supports: temp, top_p, min_p, min_tokens_to_keep, top_k.
+    # If the model doesn't end the sequence properly, you can try to adjust the sampler parameters
+    # or set eos_token logit bias via logits_processors=make_logits_processors(logit_bias={0: 4})
     # Additionally, you can provide `stream` argument to specify what device to use for generation.
     # https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
 )
@@ -140,7 +142,7 @@ for chunk in stream_generate(
     speaker=0,
     context=[],
     max_audio_length_ms=5000,
-    sampler=make_sampler(temp=0.8, min_p=0.05),
+    sampler=make_sampler(temp=0.8, top_k=50),
 ):
     # Process each chunk as it's generated
 ```
