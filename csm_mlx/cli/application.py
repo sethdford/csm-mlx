@@ -58,10 +58,10 @@ def generate_command(
     ] = None,
     min_p: Annotated[
         float | None, typer.Option("--min-p", "-m", help="Min-p sampling parameter")
-    ] = 0.05,
+    ] = None,
     top_k: Annotated[
         int | None, typer.Option("--top-k", "-k", help="Top-k sampling parameter")
-    ] = None,
+    ] = 50,
     min_tokens_to_keep: Annotated[
         int,
         typer.Option(
