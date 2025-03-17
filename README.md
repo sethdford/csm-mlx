@@ -17,10 +17,16 @@ pip install git+https://github.com/senstella/csm-mlx
 ## Usage
 
 ### Basic generation
+
+> Note: Please install `audiofile` packages to run this example - it is used to save audio file.
+
 ```python
 from mlx_lm.sample_utils import make_sampler
 from huggingface_hub import hf_hub_download
 from csm_mlx import CSM, csm_1b, generate
+
+import audiofile
+import numpy as np
 
 # Initialize the model
 csm = CSM(csm_1b())  # csm_1b() is a configuration for the CSM model.
@@ -39,12 +45,7 @@ audio = generate(
     # https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
 )
 
-# Save the generated audio; Install numpy, torchaudio, audiofile to run!
-import numpy as np
-import torch
-import torchaudio
-
-torchaudio.save("audio.wav", torch.Tensor(np.asarray(audio)).unsqueeze(0).cpu(), 24_000)
+audiofile.write("./audio.wav", np.asarray(audio), 24000)
 ```
 
 ### Providing Context
@@ -84,16 +85,27 @@ audio = generate(
 
 ### Loading audio for a segment
 
-If you want to load an audio for a segment, you need to resample it.
+If you want to load an audio for a segment, you need to resample it to 24000.
+
+> Note: Please install `audiofile` and `audresample` packages to run this example.
 
 ```python
+import mlx.core as mx
 import audiofile
 import audresample
 
-def load_audio(audio_path, sample_rate=24000):
-    data, orig_sample_rate = audiofile.load(audio_path)
-    data = audresample.resample(signal, orig_sample_rate, sample_rate)
-    return mx.array(data.squeeze())
+def read_audio(audio_path, sampling_rate=24000) -> mx.array:
+    signal, original_sampling_rate = audiofile.read(audio_path, always_2d=True)
+    signal = audresample.resample(signal, original_sampling_rate, sampling_rate)
+
+    signal = mx.array(signal)
+
+    if signal.shape[0] >= 1:
+        signal = signal.mean(axis=0)
+    else:
+        signal = signal.squeeze(0)
+
+    return signal  # (audio_length, )
 ```
 
 ## CLI
