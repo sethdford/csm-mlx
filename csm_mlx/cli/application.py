@@ -16,13 +16,7 @@ app = typer.Typer(no_args_is_help=True)
 
 @app.command("generate")
 def generate_command(
-    text: Annotated[
-        str,
-        typer.Option(
-            prompt="Please enter the text to generate",
-            help="The text to convert to speech",
-        ),
-    ],
+    text: str,
     output: Annotated[
         Path,
         typer.Option(
