@@ -103,7 +103,7 @@ audio = generate(
 
 ```python
 from mlx import nn
-from mlx_lm.sample_utils import make_sampler make_logits_processors
+from mlx_lm.sample_utils import make_sampler, make_logits_processors
 from huggingface_hub import hf_hub_download
 from csm_mlx import CSM, csm_1b, generate
 
