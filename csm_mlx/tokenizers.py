@@ -46,9 +46,9 @@ def tokenize_text_segment(text: str, speaker: int) -> tuple[mx.array, mx.array]:
     text_tokenizer = get_text_tokenizer()
 
     text_tokens = text_tokenizer.encode(f"[{speaker}]{text}")
-    text_frame = mx.zeros((len(text_tokens), 33), dtype=mx.int64)
-    text_frame_mask = mx.zeros((len(text_tokens), 33), dtype=mx.int64)
-    text_frame[:, -1] = mx.array(text_tokens, dtype=mx.int64)
+    text_frame = mx.zeros((len(text_tokens), 33), dtype=mx.int32)
+    text_frame_mask = mx.zeros((len(text_tokens), 33), dtype=mx.int32)
+    text_frame[:, -1] = mx.array(text_tokens, dtype=mx.int32)
     text_frame_mask[:, -1] = True
 
     frame_tokens.append(text_frame)
@@ -73,8 +73,8 @@ def tokenize_audio(
     eos_frame = mx.zeros((audio_tokens.shape[0], 1))
     audio_tokens = mx.concat([audio_tokens, eos_frame], axis=1)
 
-    audio_frame = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int64)
-    audio_frame_mask = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int64)
+    audio_frame = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int32)
+    audio_frame_mask = mx.zeros((audio_tokens.shape[1], 33), dtype=mx.int32)
     audio_frame[:, :-1] = audio_tokens.swapaxes(0, 1)
     audio_frame_mask[:, :-1] = True
 
@@ -96,7 +96,7 @@ def tokenize_segment(
         segment.audio, n_audio_codebooks=n_audio_codebooks
     )
 
-    return mx.concat([text_tokens, audio_tokens], axis=0).astype(mx.int64), mx.concat(
+    return mx.concat([text_tokens, audio_tokens], axis=0).astype(mx.int32), mx.concat(
         [text_masks, audio_masks], axis=0
     ).astype(mx.bool_)  # type: ignore
 

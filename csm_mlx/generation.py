@@ -105,7 +105,7 @@ def generate(
     tokens.append(text_segment_tokens)
     tokens_mask.append(text_segment_tokens_mask)
 
-    prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int64)
+    prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int32)
     prompt_tokens_mask = mx.concat(tokens_mask, axis=0)
 
     samples = []
@@ -139,7 +139,7 @@ def generate(
         samples.append(sample)
 
         input = mx.expand_dims(mx.concat([sample, mx.zeros((1, 1))], axis=1), 1).astype(
-            mx.int64
+            mx.int32
         )
         mask = mx.expand_dims(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
@@ -184,7 +184,7 @@ def stream_generate(
     tokens.append(text_segment_tokens)
     tokens_mask.append(text_segment_tokens_mask)
 
-    prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int64)
+    prompt_tokens = mx.concat(tokens, axis=0).astype(mx.int32)
     prompt_tokens_mask = mx.concat(tokens_mask, axis=0)
 
     input = mx.expand_dims(prompt_tokens, 0)
@@ -218,7 +218,7 @@ def stream_generate(
             break  # eos
 
         input = mx.expand_dims(mx.concat([sample, mx.zeros((1, 1))], axis=1), 1).astype(
-            mx.int64
+            mx.int32
         )
         mask = mx.expand_dims(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
