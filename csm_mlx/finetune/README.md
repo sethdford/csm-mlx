@@ -71,7 +71,27 @@ python -m csm_mlx.finetune.finetune_lora \
 - `--lora-rank`: Rank of the low-rank matrices (typically 4-16; higher rank = more capacity)
 - `--lora-alpha`: Scaling factor (default is 16.0, often set to 2× rank)
 - `--target-modules`: Which modules to apply LoRA to (defaults to attention, codebook head, and projection)
-- `--train-embeddings`: Trains the embedding layers in addition to the LORA adapters 
+- `--train-embeddings`: Trains the embedding layers directly (not via LoRA adapters)
+
+> **Important**: Do not include embedding layers in `--target-modules` when using `--train-embeddings`. These are mutually exclusive approaches for embedding layers. The `--train-embeddings` flag trains the full embedding matrices directly, while including them in `target_modules` would apply LoRA to them instead.
+
+#### Memory Usage Considerations
+
+There are three approaches for training embeddings, with different memory requirements:
+
+1. **LoRA for everything (lowest memory)**: Don't use `--train-embeddings`, but include embeddings in `--target-modules`
+   ```
+   --target-modules attn codebook0_head projection text_embeddings audio_embeddings
+   ```
+
+2. **LoRA + direct embedding training (medium memory)**: Use `--train-embeddings` and don't include embeddings in `--target-modules`
+   ```
+   --target-modules attn codebook0_head projection --train-embeddings
+   ```
+
+3. **Full finetuning (highest memory)**: Use `csm_mlx.finetune.finetune` instead of LoRA
+
+For best results with reasonable memory usage, option 2 is recommended.
 
 #### Advanced LoRA Options
 
@@ -122,15 +142,16 @@ weight_path = hf_hub_download(repo_id="senstella/csm-1b-mlx", filename="ckpt.saf
 model.load_weights(weight_path)
 
 # Apply LoRA structure (with same parameters as training)
+# IMPORTANT: Don't include embedding layers here if you used --train-embeddings during training
 model = apply_lora_to_model(
     model,
     rank=8,
     alpha=16.0,
-    target_modules=["attn", "codebook0_head", "projection"]
+    target_modules=["attn", "codebook0_head", "projection"]  # No embedding layers
 )
 
-# Load LoRA weights
-model = load_lora_weights(model, "lora_finetune_output/lora_ckpt_epoch_5.safetensors", load_embeddings=True)
+# Load LoRA weights (and trained embeddings if used --train-embeddings)
+model = load_lora_weights(model, "lora_finetune_output/lora_ckpt_epoch_5.safetensors")
 
 # Generate audio
 audio = generate(
@@ -150,14 +171,8 @@ audiofile.write("finetuned_output.wav", np.asarray(audio), 24000)
 For convenience, you can use the included example script:
 
 ```bash
-# Basic usage - automatically detects speaker ID from dataset
-python examples/example_finetuned1.py path/to/weights.safetensors
-
-# With custom text
-python examples/example_finetuned1.py path/to/weights.safetensors "Your custom text here"
-
-# Specify dataset and speaker ID
-python examples/example_finetuned1.py path/to/weights.safetensors "Your text" path/to/dataset.json 1
+# Basic usage with LoRA weights
+python examples/example_finetuned_lora.py lora_finetune_output/lora_ckpt_epoch_5.safetensors "Your custom text here" 0
 ```
 
 ### Merging LoRA Weights for Deployment
@@ -171,6 +186,7 @@ from csm_mlx.finetune.lora import merge_lora_weights
 model = merge_lora_weights(model)
 
 # Now the model has LoRA adaptations merged and runs at original speed
+# Directly trained embeddings (if used --train-embeddings) are already applied
 audio = generate(
     model,
     text="This is generated with merged weights.",
@@ -210,4 +226,7 @@ audio = generate(
 6. **LoRA vs. Full Finetuning**:
    - For voice cloning with limited data: Use LoRA with rank 8-16
    - For comprehensive fine-tuning with lots of data: Use full fine-tuning
-7. **Optimizer**: AdamW with weight decay works well for most cases. 
+7. **Embedding Training**:
+   - Using `--train-embeddings` often gives better results than applying LoRA to embeddings
+   - If you run into memory issues, reduce batch size or don't use `--train-embeddings`
+8. **Optimizer**: AdamW with weight decay works well for most cases. 
