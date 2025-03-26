@@ -79,9 +79,9 @@ python -m csm_mlx.finetune.finetune_lora \
 
 There are three approaches for training embeddings, with different memory requirements:
 
-1. **LoRA for everything (lowest memory)**: Don't use `--train-embeddings`, but include embeddings in `--target-modules`
+1. **LoRA for everything (lowest memory)**: Don't use `--train-embeddings`
    ```
-   --target-modules attn codebook0_head projection text_embeddings audio_embeddings
+   --target-modules attn codebook0_head projection
    ```
 
 2. **LoRA + direct embedding training (medium memory)**: Use `--train-embeddings` and don't include embeddings in `--target-modules`
