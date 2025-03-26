@@ -1,0 +1,42 @@
+[
+  {
+    "text": "Hello, this is a sample voice for finetuning.",
+    "audio_path": "finetune/datasets/audio/sample_001.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "The quick brown fox jumps over the lazy dog.",
+    "audio_path": "finetune/datasets/audio/sample_002.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "Today is a beautiful day for text to speech.",
+    "audio_path": "finetune/datasets/audio/sample_003.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "MLX makes machine learning fast on Apple Silicon.",
+    "audio_path": "finetune/datasets/audio/sample_004.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "Voice cloning works best with clear audio samples.",
+    "audio_path": "finetune/datasets/audio/sample_005.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "This is an example of another speaker's voice.",
+    "audio_path": "finetune/datasets/audio/sample_006.wav",
+    "speaker_id": 1
+  },
+  {
+    "text": "Different speakers should have different speaker IDs.",
+    "audio_path": "finetune/datasets/audio/sample_007.wav",
+    "speaker_id": 1
+  },
+  {
+    "text": "Make sure your audio files are sampled at 24kHz.",
+    "audio_path": "finetune/datasets/audio/sample_008.wav",
+    "speaker_id": 1
+  }
+] 
