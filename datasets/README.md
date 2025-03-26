@@ -8,6 +8,11 @@ The sample dataset consists of:
 - `sample_dataset.json`: JSON file containing text-audio pairs
 - `audio/`: Directory where audio files should be placed
 
+Each entry in the JSON file includes:
+- `text`: The transcript of the audio
+- `audio_path`: Path to the audio file
+- `speaker_id`: Numeric ID to identify different speakers (important for voice cloning)
+
 ## How to Use This Dataset
 
 1. **Replace with Real Audio**: 
@@ -46,40 +51,111 @@ You can use tools like Audacity or FFmpeg to convert and process your audio:
 ffmpeg -i input.mp3 -ar 24000 -ac 1 output.wav
 ```
 
-### Using the Dataset Preparation Script
+### Using the Dataset Creation Script
 
-Use the included script to prepare your dataset from audio files and a transcript:
+Use the included script to create a dataset from your audio files with matching text files:
 
 ```bash
-python -m finetune.prepare_dataset \
+python -m csm_mlx.finetune.create_dataset \
   --audio-dir /path/to/your/audio/files \
-  --text-file /path/to/your/transcript.txt \
-  --output-json finetune/datasets/your_dataset.json
+  --output-json your_dataset.json
 ```
 
-## Sample Transcript Format
+This script will automatically look for matching `.normalized.txt` or `.original.txt` files with the same basename as your audio files.
 
-For reference, here's how a transcript file should look:
+## Manual Dataset Creation
 
-```
-sample_001.wav|Hello, this is a sample voice for finetuning.
-sample_002.wav|The quick brown fox jumps over the lazy dog.
-```
-
-Or with speaker IDs:
-
-```
-sample_001.wav|0|Hello, this is a sample voice for finetuning.
-sample_002.wav|0|The quick brown fox jumps over the lazy dog.
-sample_006.wav|1|This is an example of another speaker's voice.
+You can also create your dataset manually as a JSON file:
+```json
+[
+  {
+    "text": "This is an example.",
+    "audio_path": "/path/to/audio1.wav",
+    "speaker_id": 0
+  },
+  {
+    "text": "Another example with a different speaker.",
+    "audio_path": "/path/to/audio2.wav",
+    "speaker_id": 1
+  }
+]
 ```
 
 ## Finetuning with this Dataset
 
-```bash
-# For regular finetuning
-python -m finetune.finetune --data-path finetune/datasets/sample_dataset.json
+### LoRA Finetuning (Recommended)
 
-# For LoRA finetuning (recommended)
-python -m finetune.finetune_lora --data-path finetune/datasets/sample_dataset.json
-``` 
+LoRA finetuning is memory-efficient and works well even with limited data:
+
+```bash
+# Basic LoRA finetuning
+python -m csm_mlx.finetune.finetune_lora \
+  --data-path datasets/sample_dataset.json \
+  --output-dir ./lora_finetune_output \
+  --batch-size 4 \
+  --epochs 5 \
+  --learning-rate 5e-4 \
+  --target-modules attn codebook0_head projection
+```
+
+For better results but higher memory usage, include direct embedding training:
+
+```bash
+# LoRA with direct embedding training
+python -m csm_mlx.finetune.finetune_lora \
+  --data-path datasets/sample_dataset.json \
+  --output-dir ./lora_finetune_output \
+  --batch-size 4 \
+  --epochs 5 \
+  --learning-rate 5e-4 \
+  --target-modules attn codebook0_head projection \
+  --train-embeddings
+```
+
+### Full Finetuning
+
+Full finetuning updates all model parameters but requires more data and memory:
+
+```bash
+python -m csm_mlx.finetune.finetune \
+  --data-path datasets/sample_dataset.json \
+  --output-dir ./finetune_output \
+  --batch-size 4 \
+  --epochs 5 \
+  --learning-rate 1e-5
+```
+
+## Memory Usage Considerations
+
+If you face memory issues, try these approaches (from lowest to highest memory usage):
+
+1. **LoRA for everything without embedding training**:
+   ```bash
+   --target-modules attn codebook0_head projection text_embeddings audio_embeddings
+   ```
+
+2. **LoRA with direct embedding training**:
+   ```bash
+   --target-modules attn codebook0_head projection --train-embeddings
+   ```
+
+3. **Full finetuning** (highest memory usage):
+   ```bash
+   python -m csm_mlx.finetune.finetune
+   ```
+
+For most use cases, option 2 provides the best balance of quality and memory efficiency.
+
+## Testing Your Finetuned Model
+
+After training, you can test your model using the provided example scripts:
+
+```bash
+# For LoRA finetuned models
+python examples/example_finetuned_lora.py lora_finetune_output/lora_ckpt_epoch_5.safetensors "Your custom text here" 0
+
+# For fully finetuned models
+python examples/example_finetuned_full.py finetune_output/ckpt_epoch_5.safetensors "Your custom text here" 0
+```
+
+The last parameter is the speaker ID, which should match the ID used during training. 
