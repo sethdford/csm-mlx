@@ -46,7 +46,7 @@ class BaseTrainer:
         }
 
         # Compile the loss and train functions
-        self.loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)
+        self.loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)  # type: ignore
 
     def compute_loss(self, tokens: mx.array, masks: mx.array) -> mx.array:
         """Compute loss for a batch of samples."""
@@ -73,17 +73,16 @@ class BaseTrainer:
 
         ci_stacked = mx.concat(
             [
-                self.model.embed_audio(
-                    i, audio_tokens[:, :, i]
-                )  # (batch, seq, codebook)
+                self.model.embed_audio(i, audio_tokens[:, :, i])
                 for i in range(self.model.n_audio_codebooks)
             ],
             axis=-1,
-        )
+        )  # (batch, seq, codebook + backbone activation, embed_dim)
         decoder_inputs = mx.concat(
             [mx.expand_dims(shifted_backbone_hidden, axis=-2), ci_stacked], axis=-2
         )  # (batch, seq, codebook + 1(backbone activation), embed_dim)
-        # TODO: Apply compute amortization since those it consumes VERY HIGH memory as mentioned in Sesame's blog
+
+        # TODO: Apply compute amortization since those consumes VERY HIGH memory as mentioned in Sesame's blog
         # https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice
         decoder_hidden = self.model.decoder(self.model.projection(decoder_inputs))[
             ..., 1:, :
@@ -98,6 +97,7 @@ class BaseTrainer:
         c0_loss = (c0_loss * audio_masks[:, :, 0].reshape(-1)).sum() / audio_masks[
             :, :, 0
         ].sum()
+
         total_loss = c0_loss / self.model.n_audio_codebooks
 
         for index in range(1, self.model.n_audio_codebooks):
@@ -162,7 +162,7 @@ class BaseTrainer:
             # Train on batches
             epoch_losses = []
             for batch_idx in tqdm(batch_indices, desc="Training"):
-                batch_tokens, batch_masks = dataset.get_batch(batch_idx)
+                batch_tokens, batch_masks = dataset.get_batch(batch_idx)  # type: ignore
                 loss = self.train_step(batch_tokens, batch_masks)
                 epoch_losses.append(loss)
 
