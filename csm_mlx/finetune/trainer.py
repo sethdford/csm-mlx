@@ -8,11 +8,11 @@ import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 from mlx.nn.losses import cross_entropy
+from mlx.utils import tree_flatten
 from mlx_lm.utils import save_weights
 from tqdm import tqdm
 
 from csm_mlx.finetune.dataset import CSMDataset
-from csm_mlx.finetune.lora import trainable_params
 from csm_mlx.models import CSM
 
 
@@ -144,7 +144,7 @@ class BaseTrainer:
     ) -> Dict:
         """Train the model on the dataset."""
         num_samples = len(dataset)
-        steps_per_epoch = (num_samples + batch_size - 1) // batch_size
+        _steps_per_epoch = (num_samples + batch_size - 1) // batch_size
 
         for epoch in range(epochs):
             print(f"Epoch {epoch + 1}/{epochs}")
@@ -310,7 +310,7 @@ class LoRATrainer(BaseTrainer):
         self.train_embeddings = train_embeddings
 
         # Extract LoRA parameters that need to be updated
-        self.lora_params = trainable_params(self.model, include_lora_only=True)
+        self.lora_params = tree_flatten(model.trainable_parameters())
 
         # Extract embedding parameters separately if requested
         self.embedding_params = {}

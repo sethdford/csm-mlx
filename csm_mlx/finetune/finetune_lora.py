@@ -9,8 +9,8 @@ from huggingface_hub import hf_hub_download
 
 from csm_mlx import CSM, csm_1b
 from csm_mlx.finetune.dataset import CSMDataset
-from csm_mlx.finetune.lora import apply_lora_to_model
 from csm_mlx.finetune.trainer import LoRATrainer
+from csm_mlx.finetune.utils import linear_to_lora_layers
 
 
 def parse_args():
@@ -145,11 +145,14 @@ def main():
     # Apply LoRA to the model
     print(f"Applying LoRA with rank={args.lora_rank}, alpha={args.lora_alpha}")
     print(f"Target modules: {args.target_modules}")
-    model = apply_lora_to_model(
+    model = linear_to_lora_layers(
         model,
-        rank=args.lora_rank,
-        alpha=args.lora_alpha,
-        target_modules=args.target_modules,
+        config={
+            "rank": args.lora_rank,
+            "scale": args.lora_alpha / args.lora_rank,
+            "dropout": 0.0,  # TODO: Add dropout rate
+            "keys": args.target_modules,
+        },
     )
 
     # Initialize optimizer
@@ -196,7 +199,7 @@ def main():
     print(
         f"Starting LoRA training for {args.epochs} epochs, batch size {args.batch_size}"
     )
-    training_history = trainer.train(
+    _training_history = trainer.train(
         dataset=dataset,
         batch_size=args.batch_size,
         epochs=args.epochs,

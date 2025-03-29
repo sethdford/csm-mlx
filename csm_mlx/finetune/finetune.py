@@ -171,7 +171,7 @@ def main():
 
     # Start training
     print(f"Starting training for {args.epochs} epochs, batch size {args.batch_size}")
-    training_history = trainer.train(
+    _training_history = trainer.train(
         dataset=dataset,
         batch_size=args.batch_size,
         epochs=args.epochs,
