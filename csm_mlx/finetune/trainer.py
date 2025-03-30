@@ -57,7 +57,7 @@ class BaseTrainer:
         audio_tokens = tokens[:, :, :-1]  # (batch, seq, codebook)
         shifted_audio_tokens = audio_tokens[:, 1:, :]  # (batch, seq - 1, codebook)
         audio_masks = masks[:, :, :-1]  # (batch, seq, codebook)
-        shifted_audio_masks = masks[:, 1:, :]  # (batch, seq - 1, codebook)
+        shifted_audio_masks = masks[:, 1:, :-1]  # (batch, seq - 1, codebook)
 
         # Forward pass through the model
         backbone_embeds = self.model.embed_tokens(tokens)
