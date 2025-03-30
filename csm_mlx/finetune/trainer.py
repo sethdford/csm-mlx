@@ -55,54 +55,61 @@ class BaseTrainer:
 
         # Extract text tokens (last codebook) and audio tokens (all other codebooks)
         audio_tokens = tokens[:, :, :-1]  # (batch, seq, codebook)
-        shifted_audio_tokens = audio_tokens[..., 1:]  # (batch, seq - 1, codebook)
+        shifted_audio_tokens = audio_tokens[:, 1:, :]  # (batch, seq - 1, codebook)
         audio_masks = masks[:, :, :-1]  # (batch, seq, codebook)
+        shifted_audio_masks = masks[:, 1:, :]  # (batch, seq - 1, codebook)
 
         # Forward pass through the model
         backbone_embeds = self.model.embed_tokens(tokens)
         backbone_embeds = backbone_embeds * mx.expand_dims(masks, axis=-1)
         backbone_input = backbone_embeds.sum(-2)
+        backbone_input = backbone_input[
+            :, :-1, :
+        ]  # (batch, seq - 1, embed_dim) - we don't need next token prediction here
 
-        backbone_hidden = self.model.backbone(backbone_input)
-        shifted_backbone_hidden = backbone_hidden[
-            ..., 1:, :
-        ]  # (batch, seq - 1, embed_dim)
+        backbone_hidden = self.model.backbone(
+            backbone_input
+        )  # (batch, seq - 1, embed_dim)
 
         c0_logits = self.model.codebook0_head(backbone_hidden)
-        c0_shifted_logits = c0_logits[..., :-1, :]
 
-        ci_stacked = mx.concat(
+        ci_stacked = mx.stack(
             [
-                self.model.embed_audio(i, audio_tokens[:, :, i])
+                self.model.embed_audio(i, shifted_audio_tokens[:, :, i])
                 for i in range(self.model.n_audio_codebooks)
             ],
-            axis=-1,
-        )  # (batch, seq, codebook + backbone activation, embed_dim)
+            axis=-2,
+        )  # (batch, seq - 1, codebook, embed_dim)
         decoder_inputs = mx.concat(
-            [mx.expand_dims(shifted_backbone_hidden, axis=-2), ci_stacked], axis=-2
-        )  # (batch, seq, codebook + 1(backbone activation), embed_dim)
+            [mx.expand_dims(backbone_hidden, axis=-2), ci_stacked], axis=-2
+        )  # (batch, seq - 1, codebook + 1(backbone activation), embed_dim)
 
+        b, s_minus_1, c_plus_1, h = decoder_inputs.shape
+        decoder_inputs = decoder_inputs.reshape(-1, c_plus_1, h)
         # TODO: Apply compute amortization since those consumes VERY HIGH memory as mentioned in Sesame's blog
         # https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice
-        decoder_hidden = self.model.decoder(self.model.projection(decoder_inputs))[
-            ..., 1:, :
-        ]  # (batch, seq, codebook, vocab_size) - we don't need c0 predictions
+        decoder_hidden = self.model.decoder(self.model.projection(decoder_inputs))
+        decoder_hidden = decoder_hidden.reshape(
+            b, s_minus_1, c_plus_1, -1
+        )[
+            :, :, 1:-1, :
+        ]  # (batch, seq - 1, codebook - 1, vocab_size) - we don't need c0 predictions and c_last predictions (doesn't exists)
 
         # Calculate total losses at once.
         c0_loss = cross_entropy(
-            c0_shifted_logits.reshape(-1, c0_shifted_logits.shape[-1]),
-            shifted_audio_tokens[..., 0].reshape(-1),
+            c0_logits.reshape(-1, c0_logits.shape[-1]),
+            shifted_audio_tokens[:, :, 0].reshape(-1),
             reduction="none",
         )
-        c0_loss = (c0_loss * audio_masks[:, :, 0].reshape(-1)).sum() / audio_masks[
-            :, :, 0
-        ].sum()
+        c0_loss = (
+            c0_loss * shifted_audio_masks[:, :, 0].reshape(-1)
+        ).sum() / shifted_audio_masks[:, :, 0].sum()
 
         total_loss = c0_loss / self.model.n_audio_codebooks
 
         for index in range(1, self.model.n_audio_codebooks):
             ci_logits = mx.matmul(
-                decoder_hidden[..., index - 1, :], self.model.audio_head[index - 1]
+                decoder_hidden[:, :, index - 1, :], self.model.audio_head[index - 1]
             )
             ci_loss = cross_entropy(
                 ci_logits.reshape(-1, ci_logits.shape[-1]),
@@ -110,8 +117,8 @@ class BaseTrainer:
                 reduction="none",
             )
             ci_loss = (
-                ci_loss * audio_masks[:, :, index].reshape(-1)
-            ).sum() / audio_masks[:, :, index].sum()
+                ci_loss * shifted_audio_masks[:, :, index].reshape(-1)
+            ).sum() / shifted_audio_masks[:, :, index].sum()
             total_loss += ci_loss / self.model.n_audio_codebooks
 
         return total_loss
