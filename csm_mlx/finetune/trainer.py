@@ -85,13 +85,13 @@ class BaseTrainer:
         )  # (batch, seq - 1, codebook + 1(backbone activation), embed_dim)
 
         decoder_inputs = decoder_inputs.reshape(
-            -1, n_codebooks + 1, decoder_inputs.shape[-1]
+            -1, n_codebooks, decoder_inputs.shape[-1]
         )
         # TODO: Apply compute amortization since those consumes VERY HIGH memory as mentioned in Sesame's blog
         # https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice
         decoder_hidden = self.model.decoder(self.model.projection(decoder_inputs))
         decoder_hidden = decoder_hidden.reshape(
-            batch_size, seq_len - 1, n_codebooks + 1, -1
+            batch_size, seq_len - 1, n_codebooks, -1
         )[
             :, :, 1:-1, :
         ]  # (batch, seq - 1, codebook - 1, vocab_size) - we don't need c0 predictions and c_last predictions (doesn't exists)
