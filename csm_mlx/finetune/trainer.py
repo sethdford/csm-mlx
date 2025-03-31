@@ -2,6 +2,7 @@
 
 import json
 import os
+from functools import partial
 from typing import Any, Dict, Optional
 
 import mlx.core as mx
@@ -46,7 +47,7 @@ class BaseTrainer:
         }
 
         # Compile the loss and train functions
-        self.loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)  # type: ignore
+        self._step_fn = None
 
     def compute_loss(self, tokens: mx.array, masks: mx.array) -> mx.array:
         """Compute loss for a batch of samples."""
@@ -126,8 +127,25 @@ class BaseTrainer:
 
     def train_step(self, batch_tokens: mx.array, batch_masks: mx.array) -> float:
         """Perform a single training step."""
-        loss, grads = self.loss_and_grad_fn(batch_tokens, batch_masks)
-        self.optimizer.update(self.model, grads)
+
+        if not self._step_fn:
+            model = self.model
+            optimizer = self.optimizer
+            loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)
+
+            state = [model.state, optimizer.state, mx.random.state]
+
+            @partial(mx.compile, inputs=state, outputs=state)
+            def _step(batch_tokens, batch_masks):
+                loss, grads = loss_and_grad_fn(batch_tokens, batch_masks)
+                optimizer.update(model, grads)
+
+                return loss
+
+            self._step_fn = _step
+
+        loss = self._step_fn(batch_tokens, batch_masks)
+
         self.step += 1
 
         # Log and save
