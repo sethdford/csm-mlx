@@ -50,9 +50,17 @@ class CSMDataset:
         samples: List[List[AudioTextSample]],
         n_audio_codebooks: int = 32,
         max_samples: Optional[int] = None,
+        mask_speaker_ids: int | List[int] | None = None,
     ):
         self.samples = samples[:max_samples] if max_samples else samples
         self.n_audio_codebooks = n_audio_codebooks
+        self.mask_speaker_ids = (
+            mask_speaker_ids
+            if isinstance(mask_speaker_ids, list)
+            else [mask_speaker_ids]
+            if mask_speaker_ids is not None
+            else []
+        )
 
     @classmethod
     def from_json(
@@ -84,7 +92,7 @@ class CSMDataset:
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array]:
+    def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array]:
         """Get tokenized representation of the sample."""
         sample = self.samples[idx]
         tokens_list, masks_list = map(
@@ -105,17 +113,28 @@ class CSMDataset:
         )
         tokens = mx.concatenate(tokens_list, axis=0)
         masks = mx.concatenate(masks_list, axis=0)
+        loss_masks = mx.ones_like(tokens)
 
-        return tokens, masks
+        token_position = 0
+        for tokens, segment in zip(tokens_list, sample):
+            segment_length = len(tokens)
 
-    def get_batch(self, indices: List[int]) -> Tuple[mx.array, mx.array]:
+            if segment.speaker_id in self.mask_speaker_ids:
+                loss_masks[token_position : token_position + segment_length] = 0
+
+            token_position += segment_length
+
+        return tokens, masks, loss_masks
+
+    def get_batch(self, indices: List[int]) -> Tuple[mx.array, mx.array, mx.array]:
         """Get a batch of samples."""
-        batch_tokens, batch_masks = [], []
+        batch_tokens, batch_masks, batch_loss_masks = [], [], []
 
         for idx in indices:
-            tokens, masks = self[idx]
+            tokens, masks, loss_masks = self[idx]
             batch_tokens.append(tokens)
             batch_masks.append(masks)
+            batch_loss_masks.append(loss_masks)
 
         # Need to handle variable sequence lengths here
         # For simplicity, we'll pad to the longest sequence in the batch
@@ -124,19 +143,31 @@ class CSMDataset:
         # Pad all sequences to max_len
         padded_tokens = []
         padded_masks = []
+        padded_loss_masks = []
 
-        for tokens, masks in zip(batch_tokens, batch_masks):
+        for tokens, masks, loss_masks in zip(
+            batch_tokens, batch_masks, batch_loss_masks
+        ):
             pad_len = max_len - tokens.shape[0]
 
             if pad_len > 0:
                 # Pad with zeros
                 padded_token = mx.pad(tokens, [(0, pad_len), (0, 0)], constant_values=0)
                 padded_mask = mx.pad(masks, [(0, pad_len), (0, 0)], constant_values=0)
+                padded_loss_mask = mx.pad(
+                    loss_masks, [(0, pad_len), (0, 0)], constant_values=0
+                )
 
                 padded_tokens.append(padded_token)
                 padded_masks.append(padded_mask)
+                padded_loss_masks.append(padded_loss_mask)
             else:
                 padded_tokens.append(tokens)
                 padded_masks.append(masks)
+                padded_loss_masks.append(loss_masks)
 
-        return mx.stack(padded_tokens), mx.stack(padded_masks)
+        return (
+            mx.stack(padded_tokens),
+            mx.stack(padded_masks),
+            mx.stack(padded_loss_masks),
+        )

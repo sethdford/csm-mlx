@@ -49,7 +49,9 @@ class BaseTrainer:
         # Compile the loss and train functions
         self._step_fn = None
 
-    def compute_loss(self, tokens: mx.array, masks: mx.array) -> mx.array:
+    def compute_loss(
+        self, tokens: mx.array, masks: mx.array, loss_masks: mx.array
+    ) -> mx.array:
         """Compute loss for a batch of samples."""
         # Text target is the text tokens shifted by 1
         batch_size, seq_len, n_codebooks = tokens.shape
@@ -57,8 +59,14 @@ class BaseTrainer:
         # Extract text tokens (last codebook) and audio tokens (all other codebooks)
         audio_tokens = tokens[:, :, :-1]  # (batch, seq, codebook)
         shifted_audio_tokens = audio_tokens[:, 1:, :]  # (batch, seq - 1, codebook)
+
         audio_masks = masks[:, :, :-1]  # (batch, seq, codebook)
-        shifted_audio_masks = masks[:, 1:, :-1]  # (batch, seq - 1, codebook)
+        shifted_audio_masks = audio_masks[:, 1:, :]  # (batch, seq - 1, codebook)
+
+        audio_loss_masks = loss_masks[:, :, :-1]  # (batch, seq, codebook)
+        shifted_audio_loss_masks = audio_loss_masks[
+            :, 1:, :
+        ]  # (batch, seq - 1, codebook)
 
         # Forward pass through the model
         backbone_embeds = self.model.embed_tokens(tokens)
@@ -98,14 +106,17 @@ class BaseTrainer:
         ]  # (batch, seq - 1, codebook - 1, vocab_size) - we don't need c0 predictions and c_last predictions (doesn't exists)
 
         # Calculate total losses at once.
+        shifted_audio_loss_masks = mx.logical_and(
+            shifted_audio_masks, shifted_audio_loss_masks
+        )
         c0_loss = cross_entropy(
             c0_logits.reshape(-1, c0_logits.shape[-1]),
             shifted_audio_tokens[:, :, 0].reshape(-1),
             reduction="none",
         )
         c0_loss = (
-            c0_loss * shifted_audio_masks[:, :, 0].reshape(-1)
-        ).sum() / shifted_audio_masks[:, :, 0].sum()
+            c0_loss * shifted_audio_loss_masks[:, :, 0].reshape(-1)
+        ).sum() / shifted_audio_loss_masks[:, :, 0].sum()
 
         total_loss = c0_loss / self.model.n_audio_codebooks
 
@@ -119,13 +130,15 @@ class BaseTrainer:
                 reduction="none",
             )
             ci_loss = (
-                ci_loss * shifted_audio_masks[:, :, index].reshape(-1)
-            ).sum() / shifted_audio_masks[:, :, index].sum()
+                ci_loss * shifted_audio_loss_masks[:, :, index].reshape(-1)
+            ).sum() / shifted_audio_loss_masks[:, :, index].sum()
             total_loss += ci_loss / self.model.n_audio_codebooks
 
         return total_loss
 
-    def train_step(self, batch_tokens: mx.array, batch_masks: mx.array) -> float:
+    def train_step(
+        self, batch_tokens: mx.array, batch_masks: mx.array, batch_loss_masks: mx.array
+    ) -> float:
         """Perform a single training step."""
 
         if self._step_fn is None:
@@ -136,15 +149,17 @@ class BaseTrainer:
             state = [model.state, optimizer.state, mx.random.state]
 
             @partial(mx.compile, inputs=state, outputs=state)
-            def _step(batch_tokens, batch_masks):
-                loss, grads = loss_and_grad_fn(batch_tokens, batch_masks)
+            def _step(batch_tokens, batch_masks, batch_loss_masks):
+                loss, grads = loss_and_grad_fn(
+                    batch_tokens, batch_masks, batch_loss_masks
+                )
                 optimizer.update(model, grads)
 
                 return loss
 
             self._step_fn = _step
 
-        loss = self._step_fn(batch_tokens, batch_masks)
+        loss = self._step_fn(batch_tokens, batch_masks, batch_loss_masks)
 
         self.step += 1
 
@@ -188,8 +203,10 @@ class BaseTrainer:
             # Train on batches
             epoch_losses = []
             for batch_idx in tqdm(batch_indices, desc="Training"):
-                batch_tokens, batch_masks = dataset.get_batch(batch_idx)  # type: ignore
-                loss = self.train_step(batch_tokens, batch_masks)
+                batch_tokens, batch_masks, batch_loss_masks = dataset.get_batch(
+                    batch_idx  # type: ignore
+                )
+                loss = self.train_step(batch_tokens, batch_masks, batch_loss_masks)
                 epoch_losses.append(loss)
 
             epoch_loss = sum(epoch_losses) / len(epoch_losses)
