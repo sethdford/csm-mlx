@@ -243,16 +243,14 @@ class BaseTrainer:
         os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
 
         # Get parameters to save
-        params_to_save = self.get_params_to_save()
-
-        # Get flattened parameters
-        flat_params = self._flatten_params(params_to_save)
+        params_to_save = dict(tree_flatten(self.get_params_to_save()))
 
         # Filter out any parameters without the nbytes attribute
-        valid_params = {k: v for k, v in flat_params.items() if hasattr(v, "nbytes")}
+        # valid_params = {k: v for k, v in params_to_save.items() if hasattr(v, "nbytes")}
+        # I don't quite get why we need to filter out parameters without the nbytes attribute, will uncomment if needed
 
         # Save weights with flattened parameters
-        save_weights(checkpoint_path, valid_params)
+        save_weights(checkpoint_path, params_to_save)
 
         # Save optimizer state
         optimizer_state = {
@@ -264,43 +262,6 @@ class BaseTrainer:
             json.dump(optimizer_state, f, indent=2)
 
         print(f"Saved checkpoint to {checkpoint_path}")
-
-    def _flatten_params(self, params_dict, prefix=""):
-        """Recursively flatten a nested parameter dictionary.
-
-        Args:
-            params_dict: A possibly nested dictionary of parameters
-            prefix: Prefix for parameter names (used in recursion)
-
-        Returns:
-            A flat dictionary suitable for save_weights
-        """
-        flat_params = {}
-
-        for name, param in params_dict.items():
-            full_name = f"{prefix}.{name}" if prefix else name
-
-            if isinstance(param, dict):
-                # Recursively flatten nested dictionaries
-                nested_params = self._flatten_params(param, full_name)
-                flat_params.update(nested_params)
-            elif isinstance(param, list):
-                # Handle lists of parameters (like audio_head)
-                for i, item in enumerate(param):
-                    if hasattr(item, "nbytes"):  # It's an MLX array
-                        flat_params[f"{full_name}.{i}"] = item
-                    elif isinstance(item, (list, dict)):
-                        # Recursively handle nested structures
-                        nested_params = self._flatten_params({str(i): item}, full_name)
-                        flat_params.update(nested_params)
-            elif hasattr(param, "nbytes"):
-                # This is an actual parameter (mx.array)
-                flat_params[full_name] = param
-            else:
-                # Skip parameters that aren't MLX arrays
-                print(f"Warning: Skipping parameter {full_name} of type {type(param)}")
-
-        return flat_params
 
     def load_checkpoint(self, checkpoint_path: str) -> None:
         """Load model and optimizer state from checkpoint."""
