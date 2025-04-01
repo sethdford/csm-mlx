@@ -128,7 +128,7 @@ class BaseTrainer:
     def train_step(self, batch_tokens: mx.array, batch_masks: mx.array) -> float:
         """Perform a single training step."""
 
-        if not self._step_fn:
+        if self._step_fn is None:
             model = self.model
             optimizer = self.optimizer
             loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)
