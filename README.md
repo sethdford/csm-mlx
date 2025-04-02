@@ -2,23 +2,9 @@
 
 An implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
-### Installation of the CLI
+We also have a CLI too! [Skip to CLI section](#cli)
 
-```bash
-# Recommendation: uv tools - works best!
-uv tool install "git+https://github.com/senstella/csm-mlx[cli]"
-
-# Or with pipx
-pipx install "git+https://github.com/senstella/csm-mlx[cli]"
-```
-
-### Basic Text-to-Speech
-
-```bash
-csm-mlx "Hello from Sesame." -o output.wav
-```
-
-## Installation of the package
+## Installation
 
 Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
 ```bash
@@ -29,6 +15,8 @@ Or, you can install it via pip:
 ```bash
 pip install git+https://github.com/senstella/csm-mlx
 ```
+
+> Note that this is not a CLI installation. Please refer to the [CLI section](#cli) for more information.
 
 ## Usage
 
