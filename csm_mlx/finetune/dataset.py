@@ -116,8 +116,8 @@ class CSMDataset:
         loss_masks = mx.ones_like(tokens)
 
         token_position = 0
-        for tokens, segment in zip(tokens_list, sample):
-            segment_length = len(tokens)
+        for sep_token, segment in zip(tokens_list, sample):
+            segment_length = sep_token.shape[0]
 
             if segment.speaker_id in self.mask_speaker_ids:
                 loss_masks[token_position : token_position + segment_length] = 0

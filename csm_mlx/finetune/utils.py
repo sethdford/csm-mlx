@@ -56,9 +56,7 @@ def linear_to_lora_layers(
     else:
         keys = set()
 
-    if "attn" in keys and getattr(model, "model_type", None) in [
-        "llama",
-    ]:  # Support attn params!
+    if "attn" in keys and len(getattr(model, "layers", [])) > 0:  # Support attn params!
         keys.update(["self_attn.q_proj", "self_attn.v_proj"])
 
     if isinstance(model, CSM):  # Recursively search for backbone and decoder

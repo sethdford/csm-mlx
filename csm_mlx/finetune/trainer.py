@@ -3,7 +3,7 @@
 import json
 import os
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Dict, List, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -217,11 +217,11 @@ class BaseTrainer:
 
         return self.training_history
 
-    def get_params_to_save(self) -> Dict[str, Any]:
+    def get_params_to_save(self) -> List:
         """Get parameters to save in checkpoint.
         This method can be overridden by subclasses to save different parameters.
         """
-        return self.model.parameters()
+        return tree_flatten(self.model.parameters())
 
     def get_checkpoint_prefix(self) -> str:
         """Get prefix for checkpoint files."""
@@ -243,14 +243,14 @@ class BaseTrainer:
         os.makedirs(os.path.dirname(os.path.abspath(checkpoint_path)), exist_ok=True)
 
         # Get parameters to save
-        params_to_save = dict(tree_flatten(self.get_params_to_save()))
+        params_to_save = self.get_params_to_save()
 
         # Filter out any parameters without the nbytes attribute
-        # valid_params = {k: v for k, v in params_to_save.items() if hasattr(v, "nbytes")}
+        valid_params = {k: v for k, v in params_to_save if hasattr(v, "nbytes")}
         # I don't quite get why we need to filter out parameters without the nbytes attribute, will uncomment if needed
 
         # Save weights with flattened parameters
-        save_weights(checkpoint_path, params_to_save)
+        save_weights(checkpoint_path, valid_params)
 
         # Save optimizer state
         optimizer_state = {
@@ -317,15 +317,15 @@ class LoRATrainer(BaseTrainer):
         self.lora_params = tree_flatten(model.trainable_parameters())
 
         # Extract embedding parameters separately if requested
-        self.embedding_params = {}
+        self.embedding_params = []
         if self.train_embeddings:
             all_params = self.model.parameters()
             for name, param in all_params.items():
                 if "text_embeddings" in name or "audio_embeddings" in name:
-                    self.embedding_params[name] = param
+                    self.embedding_params.append((name, param))
 
         # Combine parameters to train: both LoRA and embeddings (if requested)
-        self.trainable_params = {**self.lora_params, **self.embedding_params}
+        self.trainable_params = [*self.lora_params, *self.embedding_params]
 
         print("\nTrainable parameters:")
         print(f"LoRA parameters: {len(self.lora_params)} parameters")
@@ -338,7 +338,7 @@ class LoRATrainer(BaseTrainer):
         else:
             print("Embedding layers not directly trained")
 
-    def get_params_to_save(self) -> Dict[str, Any]:
+    def get_params_to_save(self) -> List:
         """Override to save only trainable parameters (LoRA and embeddings if enabled)."""
         return self.trainable_params
 
