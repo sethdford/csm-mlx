@@ -1,5 +1,6 @@
 import typer
 
+from csm_mlx.cli.finetune.dataset import app as dataset_app
 from csm_mlx.cli.finetune.full_finetune import app as finetune_app
 from csm_mlx.cli.finetune.lora_finetune import app as lora_finetune_app
 
@@ -9,3 +10,4 @@ app = typer.Typer(
 
 app.add_typer(finetune_app)
 app.add_typer(lora_finetune_app)
+app.add_typer(dataset_app)

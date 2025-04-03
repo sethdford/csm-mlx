@@ -1,5 +1,3 @@
-"""Dataset utilities for finetuning CSM models."""
-
 import json
 import os
 from dataclasses import dataclass
@@ -67,9 +65,12 @@ class CSMDataset:
         cls, json_path: str, max_samples: Optional[int] = None
     ) -> "CSMDataset":
         """Load dataset from a JSON file with format:
+
         [
-            {"text": "Sample text", "audio_path": "/path/to/audio.wav", "speaker_id": 0},
-            ...
+            [
+                {"text": "Sample text", "audio_path": "/path/to/audio.wav", "speaker_id": 0},
+                ...
+            ]
         ]
         """
         with open(json_path, "r") as f:

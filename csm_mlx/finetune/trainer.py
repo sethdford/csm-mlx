@@ -1,5 +1,3 @@
-"""Trainer for finetuning CSM models."""
-
 import json
 import os
 from functools import partial
@@ -141,12 +139,13 @@ class BaseTrainer:
     ) -> float:
         """Perform a single training step."""
 
-        if self._step_fn is None:
-            model = self.model
-            optimizer = self.optimizer
-            loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)
+        model = self.model
+        optimizer = self.optimizer
 
-            state = [model.state, optimizer.state, mx.random.state]
+        state = [model.state, optimizer.state, mx.random.state]
+
+        if self._step_fn is None:
+            loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)
 
             @partial(mx.compile, inputs=state, outputs=state)
             def _step(batch_tokens, batch_masks, batch_loss_masks):
@@ -160,6 +159,8 @@ class BaseTrainer:
             self._step_fn = _step
 
         loss = self._step_fn(batch_tokens, batch_masks, batch_loss_masks)
+
+        mx.eval(loss, state)
 
         self.step += 1
 
