@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import audiofile
 import audresample
@@ -47,11 +47,12 @@ class CSMDataset:
         self,
         samples: List[List[AudioTextSample]],
         n_audio_codebooks: int = 32,
-        max_samples: Optional[int] = None,
+        max_audio_length_ms: int | None = None,
         mask_speaker_ids: int | List[int] | None = None,
     ):
-        self.samples = samples[:max_samples] if max_samples else samples
+        self.samples = samples
         self.n_audio_codebooks = n_audio_codebooks
+        self.max_audio_length_ms = max_audio_length_ms
         self.mask_speaker_ids = (
             mask_speaker_ids
             if isinstance(mask_speaker_ids, list)
@@ -62,7 +63,11 @@ class CSMDataset:
 
     @classmethod
     def from_json(
-        cls, json_path: str, max_samples: Optional[int] = None
+        cls,
+        json_path: str,
+        n_audio_codebooks: int = 32,
+        max_audio_length_ms: int | None = None,
+        mask_speaker_ids: int | List[int] | None = None,
     ) -> "CSMDataset":
         """Load dataset from a JSON file with format:
 
@@ -88,7 +93,12 @@ class CSMDataset:
             for conversation in data
         ]
 
-        return cls(samples, max_samples=max_samples)
+        return cls(
+            samples,
+            n_audio_codebooks=n_audio_codebooks,
+            max_audio_length_ms=max_audio_length_ms,
+            mask_speaker_ids=mask_speaker_ids,
+        )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -124,6 +134,22 @@ class CSMDataset:
                 loss_masks[token_position : token_position + segment_length] = 0
 
             token_position += segment_length
+
+        tokens = (
+            tokens[: int(self.max_audio_length_ms / 80)]
+            if self.max_audio_length_ms is not None
+            else tokens
+        )
+        masks = (
+            masks[: int(self.max_audio_length_ms / 80)]
+            if self.max_audio_length_ms is not None
+            else masks
+        )
+        loss_masks = (
+            loss_masks[: int(self.max_audio_length_ms / 80)]
+            if self.max_audio_length_ms is not None
+            else loss_masks
+        )
 
         return tokens, masks, loss_masks
 

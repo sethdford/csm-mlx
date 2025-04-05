@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import mlx.core as mx
 import mlx.optimizers as optim
@@ -8,10 +8,10 @@ import typer
 from huggingface_hub import hf_hub_download
 from typing_extensions import Annotated
 
-from csm_mlx import CSM, csm_1b
-from csm_mlx.cli.config import Models, OptimizerChoice
+from csm_mlx import CSM
+from csm_mlx.cli.config import MODEL, Models, OptimizerChoice
 from csm_mlx.finetune.dataset import CSMDataset
-from csm_mlx.finetune.trainer import CSMTrainer
+from csm_mlx.finetune.trainer import CSMTrainer, TrainArgs
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -48,23 +48,18 @@ def finetune_command(
             readable=True,
         ),
     ] = None,
-    resume_from: Annotated[
-        Optional[Path],
-        typer.Option(
-            "--resume-from",
-            help="Path to checkpoint to resume training from",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-        ),
-    ] = None,
-    max_samples: Annotated[
+    max_audio_length_ms: Annotated[
         Optional[int],
         typer.Option(
-            "--max-samples",
-            help="Maximum number of samples to use from dataset",
-            min=1,
+            "--max-audio-length-ms",
+            help="Maximum length of audio in milliseconds",
+        ),
+    ] = None,
+    mask_speaker_ids: Annotated[
+        Optional[List[int]],
+        typer.Option(
+            "--mask-speaker-ids",
+            help="List of speaker IDs to mask in the output",
         ),
     ] = None,
     batch_size: Annotated[
@@ -103,18 +98,34 @@ def finetune_command(
             min=0.0,
         ),
     ] = 1e-4,
-    save_every: Annotated[
+    max_norm: Annotated[
+        float,
+        typer.Option(
+            "--max-norm",
+            help="Max norm for gradient clipping (0.0 to disable)",
+            min=0.0,
+        ),
+    ] = 0.0,
+    first_codebook_weight_multiplier: Annotated[
+        float,
+        typer.Option(
+            "--first_codebook_weight_multiplier",
+            help="Loss weight for zero-th codebook",
+            min=0.0,
+        ),
+    ] = 1.0,
+    ckpt_freq: Annotated[
         int,
         typer.Option(
-            "--save-every",
+            "--ckpt_freq",
             help="Save checkpoints every N steps",
             min=1,
         ),
     ] = 100,
-    log_every: Annotated[
+    log_freq: Annotated[
         int,
         typer.Option(
-            "--log-every",
+            "--log-freq",
             help="Log metrics every N steps",
             min=1,
         ),
@@ -145,6 +156,13 @@ def finetune_command(
             help="Freeze decoder parameters during finetuning",
         ),
     ] = False,
+    gradient_checkpointing: Annotated[
+        bool,
+        typer.Option(
+            "--gradient-ckpt/--no-gradient-ckpt",
+            help="Enable gradient checkpointing",
+        ),
+    ] = False,
     optimizer: Annotated[
         OptimizerChoice,
         typer.Option(
@@ -161,34 +179,19 @@ def finetune_command(
     os.makedirs(output_dir, exist_ok=True)
 
     print("Initializing model...")
-    if model == Models._1b:
-        model_args = csm_1b()
-    else:
-        raise typer.BadParameter(
-            f"Unsupported model size: {model.value}. Only '1b' is currently supported."
-        )
+    model_config = MODEL[model.value]
 
-    csm_model = CSM(model_args)
+    csm_model = CSM(model_config.get("config"))  # type: ignore
     mx.eval(csm_model.parameters())
 
     if pretrained_path:
         print(f"Loading pretrained weights from {pretrained_path}")
         csm_model.load_weights(str(pretrained_path))
-    elif resume_from:
-        print("Weights will be loaded from resume checkpoint.")
-        pass
     else:
-        print("Downloading pretrained weights from Hugging Face...")
-        if model == Models._1b:
-            repo_id = "senstella/csm-1b-mlx"
-            filename = "ckpt.safetensors"
-        else:
-            raise ValueError("Cannot determine Hugging Face repo for unknown model.")
+        print("Using pretrained weights from Hugging Face...")
+        weight = hf_hub_download(**model_config.get("loader"))  # type: ignore
 
-        print(f"Downloading {filename} from {repo_id}...")
-        weight_path = hf_hub_download(repo_id=repo_id, filename=filename)
-        print(f"Downloaded weights to {weight_path}")
-        csm_model.load_weights(weight_path)
+        csm_model.load_weights(weight)
 
     if freeze_backbone:
         print("Freezing backbone parameters...")
@@ -217,21 +220,24 @@ def finetune_command(
         opt = optim.AdamW(learning_rate=learning_rate, weight_decay=weight_decay)
 
     trainer = CSMTrainer(
-        model=csm_model,
-        optimizer=opt,
-        checkpoint_dir=str(output_dir),
-        save_every=save_every,
-        log_every=log_every,
+        TrainArgs(
+            model=csm_model,
+            optimizer=opt,
+            output_dir=output_dir,
+            max_norm=max_norm,
+            first_codebook_weight_multiplier=first_codebook_weight_multiplier,
+            gradient_checkpointing=gradient_checkpointing,
+            ckpt_freq=ckpt_freq,
+            log_freq=log_freq,
+        )
     )
-
-    if resume_from:
-        print(f"Resuming training from checkpoint: {resume_from}")
-        trainer.load_checkpoint(str(resume_from))
 
     print(f"Loading dataset from {data_path}")
     dataset = CSMDataset.from_json(
         str(data_path),
-        max_samples=max_samples,
+        n_audio_codebooks=csm_model.n_audio_codebooks,
+        max_audio_length_ms=max_audio_length_ms,
+        mask_speaker_ids=mask_speaker_ids,
     )
     print(f"Loaded {len(dataset)} samples")
 
@@ -245,8 +251,8 @@ def finetune_command(
 
     print(f"Starting training for {epochs} epochs, batch size {batch_size}")
     print(f"Optimizer: {optimizer.value}, LR: {learning_rate}, WD: {weight_decay}")
-    print(f"Saving checkpoints every {save_every} steps to {output_dir}")
-    print(f"Logging metrics every {log_every} steps")
+    print(f"Saving checkpoints every {ckpt_freq} steps to {output_dir}")
+    print(f"Logging metrics every {log_freq} steps")
     print(f"Backbone frozen: {freeze_backbone}, Decoder frozen: {freeze_decoder}")
 
     try:

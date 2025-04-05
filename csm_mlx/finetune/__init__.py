@@ -2,6 +2,6 @@
 
 # Path handling isn't needed anymore since we're inside the csm_mlx package
 from csm_mlx.finetune.dataset import AudioTextSample, CSMDataset
-from csm_mlx.finetune.trainer import CSMTrainer, LoRATrainer
+from csm_mlx.finetune.trainer import CSMTrainer
 
-__all__ = ["CSMTrainer", "LoRATrainer", "AudioTextSample", "CSMDataset"]
+__all__ = ["CSMTrainer", "AudioTextSample", "CSMDataset"]
