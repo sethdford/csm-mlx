@@ -104,7 +104,7 @@ def convert(
                             sample_data = {
                                 "text": text_content,
                                 "audio_path": str(audio_path.resolve()),
-                                "speaker_id": speaker_id,
+                                "speaker": speaker_id,
                             }
                             current_conversation_samples.append(sample_data)
 
