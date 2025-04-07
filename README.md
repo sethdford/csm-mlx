@@ -18,8 +18,6 @@ pip install git+https://github.com/senstella/csm-mlx
 
 ### Basic generation
 
-> Note: Please install `audiofile` packages to run this example - it is used to save audio file.
-
 ```python
 from mlx_lm.sample_utils import make_sampler
 from huggingface_hub import hf_hub_download
@@ -150,8 +148,6 @@ for chunk in stream_generate(
 ### Loading audio for a segment
 
 If you want to load an audio for a segment, you need to resample it to 24000.
-
-> Note: Please install `audiofile` and `audresample` packages to run this example.
 
 ```python
 import mlx.core as mx

@@ -1,43 +1,11 @@
 import json
-import os
-from dataclasses import dataclass
-from typing import List, Tuple
+from pathlib import Path
+from typing import List, Optional, Tuple
 
-import audiofile
-import audresample
 import mlx.core as mx
 
 from csm_mlx.segment import Segment
 from csm_mlx.tokenizers import tokenize_segment
-
-
-@dataclass
-class AudioTextSample:
-    """A text-audio sample for finetuning."""
-
-    text: str
-    audio_path: str
-    speaker_id: int = 0
-
-    @property
-    def audio(self) -> mx.array:
-        """Load the audio file if it exists."""
-        if not os.path.exists(self.audio_path):
-            raise FileNotFoundError(f"Audio file not found: {self.audio_path}")
-
-        signal, original_sampling_rate = audiofile.read(self.audio_path, always_2d=True)
-        signal = audresample.resample(signal, original_sampling_rate, 24000)
-
-        # Convert to MLX array
-        signal = mx.array(signal)
-
-        # Handle stereo to mono conversion if needed
-        if signal.shape[0] >= 1:
-            signal = signal.mean(axis=0)
-        else:
-            signal = signal.squeeze(0)
-
-        return signal
 
 
 class CSMDataset:
@@ -45,10 +13,10 @@ class CSMDataset:
 
     def __init__(
         self,
-        samples: List[List[AudioTextSample]],
+        samples: List[List[Segment]],
         n_audio_codebooks: int = 32,
-        max_audio_length_ms: int | None = None,
-        mask_speaker_ids: int | List[int] | None = None,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
     ):
         self.samples = samples
         self.n_audio_codebooks = n_audio_codebooks
@@ -66,14 +34,14 @@ class CSMDataset:
         cls,
         json_path: str,
         n_audio_codebooks: int = 32,
-        max_audio_length_ms: int | None = None,
-        mask_speaker_ids: int | List[int] | None = None,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
     ) -> "CSMDataset":
         """Load dataset from a JSON file with format:
 
         [
             [
-                {"text": "Sample text", "audio_path": "/path/to/audio.wav", "speaker_id": 0},
+                {"text": "Sample text", "audio_path": "/path/to/audio.wav", "speaker": 0},
                 ...
             ]
         ]
@@ -81,12 +49,13 @@ class CSMDataset:
         with open(json_path, "r") as f:
             data = json.load(f)
 
+        # Create LazySegment instances for each item
         samples = [
             [
-                AudioTextSample(
+                Segment(
                     text=item["text"],
-                    audio_path=item["audio_path"],
-                    speaker_id=item.get("speaker_id", 0),
+                    audio_path=Path(item["audio_path"]),
+                    speaker=item.get("speaker", 0),
                 )
                 for item in conversation
             ]
@@ -106,22 +75,21 @@ class CSMDataset:
     def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array]:
         """Get tokenized representation of the sample."""
         sample = self.samples[idx]
+
+        # Tokenize segments (audio will be loaded lazily when needed)
         tokens_list, masks_list = map(
             list,
             zip(
                 *[
                     tokenize_segment(
-                        Segment(
-                            speaker=segment.speaker_id,
-                            audio=segment.audio,
-                            text=segment.text,
-                        ),
+                        segment,
                         n_audio_codebooks=self.n_audio_codebooks,
                     )
                     for segment in sample
                 ]
             ),
         )
+
         tokens = mx.concatenate(tokens_list, axis=0)
         masks = mx.concatenate(masks_list, axis=0)
         loss_masks = mx.ones_like(tokens)
@@ -130,26 +98,17 @@ class CSMDataset:
         for sep_token, segment in zip(tokens_list, sample):
             segment_length = sep_token.shape[0]
 
-            if segment.speaker_id in self.mask_speaker_ids:
+            if segment.speaker in self.mask_speaker_ids:
                 loss_masks[token_position : token_position + segment_length] = 0
 
             token_position += segment_length
 
-        tokens = (
-            tokens[: int(self.max_audio_length_ms / 80)]
-            if self.max_audio_length_ms is not None
-            else tokens
-        )
-        masks = (
-            masks[: int(self.max_audio_length_ms / 80)]
-            if self.max_audio_length_ms is not None
-            else masks
-        )
-        loss_masks = (
-            loss_masks[: int(self.max_audio_length_ms / 80)]
-            if self.max_audio_length_ms is not None
-            else loss_masks
-        )
+        # Apply maximum length constraint if specified
+        if self.max_audio_length_ms is not None:
+            max_tokens = int(self.max_audio_length_ms / 80)
+            tokens = tokens[:max_tokens]
+            masks = masks[:max_tokens]
+            loss_masks = loss_masks[:max_tokens]
 
         return tokens, masks, loss_masks
 
@@ -163,11 +122,9 @@ class CSMDataset:
             batch_masks.append(masks)
             batch_loss_masks.append(loss_masks)
 
-        # Need to handle variable sequence lengths here
-        # For simplicity, we'll pad to the longest sequence in the batch
+        # Handle variable sequence lengths by padding to the longest in the batch
         max_len = max(tokens.shape[0] for tokens in batch_tokens)
 
-        # Pad all sequences to max_len
         padded_tokens = []
         padded_masks = []
         padded_loss_masks = []
@@ -178,16 +135,15 @@ class CSMDataset:
             pad_len = max_len - tokens.shape[0]
 
             if pad_len > 0:
-                # Pad with zeros
-                padded_token = mx.pad(tokens, [(0, pad_len), (0, 0)], constant_values=0)
-                padded_mask = mx.pad(masks, [(0, pad_len), (0, 0)], constant_values=0)
-                padded_loss_mask = mx.pad(
-                    loss_masks, [(0, pad_len), (0, 0)], constant_values=0
+                padded_tokens.append(
+                    mx.pad(tokens, [(0, pad_len), (0, 0)], constant_values=0)
                 )
-
-                padded_tokens.append(padded_token)
-                padded_masks.append(padded_mask)
-                padded_loss_masks.append(padded_loss_mask)
+                padded_masks.append(
+                    mx.pad(masks, [(0, pad_len), (0, 0)], constant_values=0)
+                )
+                padded_loss_masks.append(
+                    mx.pad(loss_masks, [(0, pad_len), (0, 0)], constant_values=0)
+                )
             else:
                 padded_tokens.append(tokens)
                 padded_masks.append(masks)

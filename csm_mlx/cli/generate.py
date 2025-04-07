@@ -9,7 +9,7 @@ from typing_extensions import Annotated
 
 from csm_mlx import CSM, Segment, generate
 from csm_mlx.cli.config import MODEL, Models
-from csm_mlx.cli.utils import read_audio, write_audio
+from csm_mlx.utils import write_audio
 
 app = typer.Typer()
 
@@ -110,7 +110,7 @@ def generate_command(
     csm.load_weights(weight)
 
     context = [
-        Segment(speaker, text, read_audio(audio, sampling_rate))
+        Segment(speaker, text, None, audio)
         for audio, text, speaker in zip(input_audios, input_texts, input_speakers)
     ]
 

@@ -7,6 +7,7 @@ import mlx.core as mx
 import mlx.optimizers as optim
 import typer
 from huggingface_hub import hf_hub_download
+from mlx.utils import tree_flatten
 from typing_extensions import Annotated
 
 from csm_mlx import CSM
@@ -250,9 +251,9 @@ def finetune_lora_command(
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    with open(os.path.join(output_dir, "lora_config.json"), "w") as f:
+    with open(os.path.join(output_dir, "adapter_config.json"), "w") as f:
         json.dump(
-            lora_config,
+            {"lora_parameters": lora_config, "fine_tune_type": "lora"},
             f,
             indent=2,
         )
@@ -319,10 +320,13 @@ def finetune_lora_command(
         )
         print("\nTraining complete!")
         print(f"Checkpoints and logs saved in {output_dir}")
-        final_save_path = output_dir / "final_model.safetensors"
-        print(f"Saving final model weights to {final_save_path}...")
-        csm_model.save_weights(str(final_save_path))
-        print("Final model saved.")
+        final_adopter_path = output_dir / "adapters.safetensors"
+        print(f"Saving final adopter weights to {final_adopter_path}...")
+        mx.save_safetensors(
+            str(final_adopter_path),
+            dict(tree_flatten(csm_model.trainable_parameters())),
+        )
+        print("Final adopter saved.")
 
     except Exception as e:
         print(f"An error occurred during training: {e}")
