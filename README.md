@@ -2,6 +2,8 @@
 
 An implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
+We support fine-tuning too! [Take a look here!](FINETUNING.md)
+
 ## Installation
 
 Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
@@ -181,6 +183,8 @@ pipx install "git+https://github.com/senstella/csm-mlx[cli]"
 ```
 
 ### Usage
+
+> Finetuning CLI usage is [here](FINETUNING_CLI.md).
 
 #### Basic Text-to-Speech
 
