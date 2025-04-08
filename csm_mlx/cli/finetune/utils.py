@@ -10,14 +10,7 @@ def natural_sort_key(s: str) -> List[Union[int, str]]:
 
 
 def find_speaker_id(filename: str) -> Optional[int]:
-    match = re.match(r"^(\d+)_.*", filename)
-    if match:
-        try:
-            return int(match.group(1))
-        except ValueError:
-            return None
-
-    match = re.match(r"^speaker(\d+)_.*", filename, re.IGNORECASE)
+    match = re.match(r".*speaker(\d+)_.*", filename, re.IGNORECASE)
     if match:
         try:
             return int(match.group(1))

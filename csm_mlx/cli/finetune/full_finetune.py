@@ -29,6 +29,18 @@ def finetune_command(
             readable=True,
         ),
     ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory to save checkpoints and logs",
+            file_okay=False,
+            dir_okay=True,
+            writable=True,
+            resolve_path=True,
+        ),
+    ],
     model: Annotated[
         Models,
         typer.Option(
@@ -130,18 +142,6 @@ def finetune_command(
             min=1,
         ),
     ] = 10,
-    output_dir: Annotated[
-        Path,
-        typer.Option(
-            "--output-dir",
-            "-o",
-            help="Directory to save checkpoints and logs",
-            file_okay=False,
-            dir_okay=True,
-            writable=True,
-            resolve_path=True,
-        ),
-    ] = Path("./finetune_output"),
     freeze_backbone: Annotated[
         bool,
         typer.Option(
