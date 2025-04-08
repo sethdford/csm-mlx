@@ -2,9 +2,13 @@
 
 An implementation of the CSM(Conversation Speech Model) for Apple Silicon using MLX.
 
-We support fine-tuning too! [Take a look here!](FINETUNING.md)
+[We also have a CLI!](#cli)
+
+And [fine-tuning too!](FINETUNING.md)
 
 ## Installation
+
+> Note that this is not a CLI installation. Please refer to the [CLI section](#cli) for more information.
 
 Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
 ```bash
@@ -15,6 +19,7 @@ Or, you can install it via pip:
 ```bash
 pip install git+https://github.com/senstella/csm-mlx
 ```
+
 
 ## Usage
 
@@ -87,7 +92,7 @@ audio = generate(
 
 ```python
 from mlx import nn
-from mlx_lm.sample_utils import make_sampler make_logits_processors
+from mlx_lm.sample_utils import make_sampler, make_logits_processors
 from huggingface_hub import hf_hub_download
 from csm_mlx import CSM, csm_1b, generate
 
