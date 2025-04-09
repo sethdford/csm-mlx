@@ -88,7 +88,7 @@ def convert(
                             )
                             print(f"  '{audio_path}'")
                             print(
-                                "Filename must include 'speaker<digits>_' (case-insensitive)."
+                                "Filename must include 'speaker<digits>' (case-insensitive)."
                             )
                             raise typer.Exit(code=1)
 
