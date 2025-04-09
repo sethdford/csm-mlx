@@ -12,12 +12,12 @@ And [fine-tuning too!](FINETUNING.md)
 
 Recommendation: Give [`uv`](https://docs.astral.sh/uv/) a try. It's truly magical.
 ```bash
-uv add git+https://github.com/senstella/csm-mlx
+uv add git+https://github.com/senstella/csm-mlx --upgrade
 ```
 
 Or, you can install it via pip:
 ```bash
-pip install git+https://github.com/senstella/csm-mlx
+pip install git+https://github.com/senstella/csm-mlx --upgrade
 ```
 
 
@@ -73,7 +73,7 @@ context = [
     Segment(
         speaker=1,
         text="I'm doing great, thank you!",
-        audio=mx.array(...)  # Previous audio for this segment
+        audio_path="~/somewhere_in_the_universe/stuff.wav"  # Or you can specify the audio path too!
     )
 ]
 
@@ -181,10 +181,10 @@ def read_audio(audio_path, sampling_rate=24000) -> mx.array:
 
 ```bash
 # Recommendation: uv tools - works best!
-uv tool install "git+https://github.com/senstella/csm-mlx[cli]"
+uv tool install "git+https://github.com/senstella/csm-mlx[cli]" --upgrade
 
 # Or with pipx
-pipx install "git+https://github.com/senstella/csm-mlx[cli]"
+pipx install "git+https://github.com/senstella/csm-mlx[cli]" --upgrade
 ```
 
 ### Usage
