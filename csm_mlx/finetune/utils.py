@@ -4,6 +4,7 @@ import types
 from pathlib import Path
 from typing import Dict
 
+import mlx.core as mx
 import mlx.nn as nn
 from mlx.utils import tree_unflatten
 from mlx_lm.models.switch_layers import QuantizedSwitchLinear, SwitchLinear
@@ -11,6 +12,28 @@ from mlx_lm.tuner.dora import DoRAEmbedding, DoRALinear
 from mlx_lm.tuner.lora import LoRAEmbedding, LoRALinear, LoRASwitchLinear
 
 from csm_mlx.models import CSM
+
+
+@mx.compile
+def logsoftmax(x, axis=-1):
+    x_max = mx.max(x, axis=axis, keepdims=True)
+    x_shifted = x - x_max
+    log_sum_exp = mx.log(mx.sum(mx.exp(x_shifted), axis=axis, keepdims=True))
+    return x_shifted - log_sum_exp
+
+
+def get_logps(logits: mx.array, labels: mx.array) -> mx.array:
+    assert logits.shape[:-1] == labels.shape, (
+        f"Logits shape {logits.shape} does not match labels shape {labels.shape}"
+    )
+
+    distribution_logps = logsoftmax(logits.astype(mx.float32), axis=-1)
+    indices = mx.expand_dims(labels, axis=-1)
+
+    per_token_logps = mx.take_along_axis(distribution_logps, indices, axis=-1)
+    per_token_logps = mx.squeeze(per_token_logps, axis=-1)
+
+    return per_token_logps
 
 
 def linear_to_lora_layers(

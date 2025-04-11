@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import mlx.core as mx
 
@@ -112,7 +112,7 @@ class CSMDataset:
 
         return tokens, masks, loss_masks
 
-    def get_batch(self, indices: List[int]) -> Tuple[mx.array, mx.array, mx.array]:
+    def get_batch(self, indices: List[int]) -> Dict[str, mx.array]:
         """Get a batch of samples."""
         batch_tokens, batch_masks, batch_loss_masks = [], [], []
 
@@ -149,8 +149,8 @@ class CSMDataset:
                 padded_masks.append(masks)
                 padded_loss_masks.append(loss_masks)
 
-        return (
-            mx.stack(padded_tokens),
-            mx.stack(padded_masks),
-            mx.stack(padded_loss_masks),
-        )
+        return {
+            "tokens": mx.stack(padded_tokens),
+            "masks": mx.stack(padded_masks),
+            "loss_masks": mx.stack(padded_loss_masks),
+        }

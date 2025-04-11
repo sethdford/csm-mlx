@@ -186,11 +186,14 @@ class CSMTrainer:
         # Compile the loss and train functions
         self._step_fn = None
 
-    def compute_loss(
-        self, tokens: mx.array, masks: mx.array, loss_masks: mx.array
-    ) -> mx.array:
+    @staticmethod
+    def compute_loss(model: CSM, batch: Dict[str, mx.array]) -> mx.array:
         """Compute loss for a batch of samples."""
-        # Text target is the text tokens shifted by 1
+        tokens = batch["tokens"]
+        masks = batch["masks"]
+        loss_masks = batch["loss_masks"]
+        first_codebook_weight_multiplier = batch["first_codebook_weight_multiplier"]
+
         batch_size, seq_len, n_codebooks = tokens.shape
 
         # Extract text tokens (last codebook) and audio tokens (all other codebooks)
@@ -206,23 +209,21 @@ class CSMTrainer:
         ]  # (batch, seq - 1, codebook)
 
         # Forward pass through the model
-        backbone_embeds = self.model.embed_tokens(tokens)
+        backbone_embeds = model.embed_tokens(tokens)
         backbone_embeds = backbone_embeds * mx.expand_dims(masks, axis=-1)
         backbone_input = backbone_embeds.sum(-2)
         backbone_input = backbone_input[
             :, :-1, :
         ]  # (batch, seq - 1, embed_dim) - we don't need next token prediction here
 
-        backbone_hidden = self.model.backbone(
-            backbone_input
-        )  # (batch, seq - 1, embed_dim)
+        backbone_hidden = model.backbone(backbone_input)  # (batch, seq - 1, embed_dim)
 
-        c0_logits = self.model.codebook0_head(backbone_hidden)
+        c0_logits = model.codebook0_head(backbone_hidden)
 
         ci_stacked = mx.stack(
             [
-                self.model.embed_audio(i, shifted_audio_tokens[:, :, i])
-                for i in range(self.model.n_audio_codebooks)
+                model.embed_audio(i, shifted_audio_tokens[:, :, i])
+                for i in range(model.n_audio_codebooks)
             ],
             axis=-2,
         )  # (batch, seq - 1, codebook, embed_dim)
@@ -235,7 +236,7 @@ class CSMTrainer:
         )
         # TODO: Apply compute amortization since those consumes VERY HIGH memory as mentioned in Sesame's blog
         # https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice
-        decoder_hidden = self.model.decoder(self.model.projection(decoder_inputs))
+        decoder_hidden = model.decoder(model.projection(decoder_inputs))
         decoder_hidden = decoder_hidden.reshape(
             batch_size, seq_len - 1, n_codebooks, -1
         )[
@@ -254,14 +255,14 @@ class CSMTrainer:
         c0_loss = (
             (c0_loss * shifted_audio_loss_masks[:, :, 0].reshape(-1)).sum()
             / shifted_audio_loss_masks[:, :, 0].sum()
-            * self.args.first_codebook_weight_multiplier
+            * first_codebook_weight_multiplier
         )
 
-        total_loss = c0_loss / self.model.n_audio_codebooks
+        total_loss = c0_loss / model.n_audio_codebooks
 
-        for index in range(1, self.model.n_audio_codebooks):
+        for index in range(1, model.n_audio_codebooks):
             ci_logits = mx.matmul(
-                decoder_hidden[:, :, index - 1, :], self.model.audio_head[index - 1]
+                decoder_hidden[:, :, index - 1, :], model.audio_head[index - 1]
             )
             ci_loss = cross_entropy(
                 ci_logits.reshape(-1, ci_logits.shape[-1]),
@@ -271,19 +272,24 @@ class CSMTrainer:
             ci_loss = (
                 ci_loss * shifted_audio_loss_masks[:, :, index].reshape(-1)
             ).sum() / shifted_audio_loss_masks[:, :, index].sum()
-            total_loss += ci_loss / self.model.n_audio_codebooks
+            total_loss += ci_loss / model.n_audio_codebooks
 
         return total_loss
 
-    def train_step(
-        self, batch_tokens: mx.array, batch_masks: mx.array, batch_loss_masks: mx.array
-    ) -> float:
+    def train_step(self, batch: Dict[str, mx.array]) -> float:
         """Perform a single training step."""
 
         model = self.model
         optimizer = self.optimizer
+        first_codebook_weight_multiplier = mx.array(
+            self.args.first_codebook_weight_multiplier
+        )
 
-        state = [model.state, optimizer.state, mx.random.state]
+        state = [
+            model.state,
+            optimizer.state,
+            mx.random.state,
+        ]
 
         if self._step_fn is None:
             loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)  # type: ignore
@@ -291,35 +297,43 @@ class CSMTrainer:
             if self.args.max_norm > 0:
 
                 @partial(mx.compile, inputs=state, outputs=state)
-                def _step(batch_tokens, batch_masks, batch_loss_masks):
+                def _step(batch: Dict[str, mx.array]):
                     loss, grads = loss_and_grad_fn(
-                        batch_tokens, batch_masks, batch_loss_masks
+                        self.model,
+                        {
+                            **batch,
+                            "first_codebook_weight_multiplier": first_codebook_weight_multiplier,
+                        },
                     )
 
                     grads, norm = optim.clip_grad_norm(grads, self.args.max_norm)
 
                     optimizer.update(model, grads)
 
-                    return loss
+                    return loss, norm
 
                 self._step_fn = _step
             else:
 
                 @partial(mx.compile, inputs=state, outputs=state)
-                def _step(batch_tokens, batch_masks, batch_loss_masks):
+                def _step(batch: Dict[str, mx.array]):
                     loss, grads = loss_and_grad_fn(
-                        batch_tokens, batch_masks, batch_loss_masks
+                        self.model,
+                        {
+                            **batch,
+                            "first_codebook_weight_multiplier": first_codebook_weight_multiplier,
+                        },
                     )
 
                     optimizer.update(model, grads)
 
-                    return loss
+                    return loss, 0
 
                 self._step_fn = _step
 
-        loss = self._step_fn(batch_tokens, batch_masks, batch_loss_masks)
+        loss, norm = self._step_fn(batch)
 
-        mx.eval(loss, state)
+        mx.eval(loss, norm, state)
 
         return float(loss)
 
@@ -379,11 +393,11 @@ class CSMTrainer:
             num_batches_processed_this_epoch = 0
 
             for batch_num_in_full_epoch, batch_idx_list in pbar:
-                batch_tokens, batch_masks, batch_loss_masks = dataset.get_batch(
+                batch = dataset.get_batch(
                     batch_idx_list  # type: ignore
                 )
 
-                loss = self.train_step(batch_tokens, batch_masks, batch_loss_masks)
+                loss = self.train_step(batch)
 
                 self.state.step += 1
                 self.state.learning_rate = float(self.optimizer.learning_rate)
