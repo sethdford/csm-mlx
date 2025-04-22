@@ -1,4 +1,5 @@
 from functools import cache
+from typing import List
 
 import mlx.core as mx
 from huggingface_hub import hf_hub_download
@@ -99,6 +100,49 @@ def tokenize_segment(
     return mx.concat([text_tokens, audio_tokens], axis=0).astype(mx.int32), mx.concat(
         [text_masks, audio_masks], axis=0
     ).astype(mx.bool_)  # type: ignore
+
+
+def tokenize_segments_with_loss_mask(
+    segments: List[Segment],
+    *,
+    n_audio_codebooks: int = 32,
+    mask_speaker_ids: List[int],
+    max_audio_length_ms: int | None,
+) -> tuple[mx.array, mx.array, mx.array]:
+    tokens_list, masks_list = map(
+        list,
+        zip(
+            *[
+                tokenize_segment(
+                    segment,
+                    n_audio_codebooks=n_audio_codebooks,
+                )
+                for segment in segments
+            ]
+        ),
+    )
+
+    tokens = mx.concatenate(tokens_list, axis=0)
+    masks = mx.concatenate(masks_list, axis=0)
+    loss_masks = mx.ones_like(tokens)
+
+    token_position = 0
+    for sep_token, segment in zip(tokens_list, segments):
+        segment_length = sep_token.shape[0]
+
+        if segment.speaker in mask_speaker_ids:
+            loss_masks[token_position : token_position + segment_length] = 0
+
+        token_position += segment_length
+
+    # Apply maximum length constraint if specified
+    if max_audio_length_ms is not None:
+        max_tokens = int(max_audio_length_ms / 80)
+        tokens = tokens[:max_tokens]
+        masks = masks[:max_tokens]
+        loss_masks = loss_masks[:max_tokens]
+
+    return tokens, masks, loss_masks
 
 
 def decode_audio(audio_tokens: mx.array, *, n_audio_codebooks=32) -> mx.array:

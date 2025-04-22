@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import mlx.core as mx
 
 from csm_mlx.segment import Segment
-from csm_mlx.tokenizers import tokenize_segment
+from csm_mlx.tokenizers import tokenize_segments_with_loss_mask
 
 
 class CSMDataset:
@@ -73,44 +73,12 @@ class CSMDataset:
         return len(self.samples)
 
     def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array]:
-        """Get tokenized representation of the sample."""
-        sample = self.samples[idx]
-
-        # Tokenize segments (audio will be loaded lazily when needed)
-        tokens_list, masks_list = map(
-            list,
-            zip(
-                *[
-                    tokenize_segment(
-                        segment,
-                        n_audio_codebooks=self.n_audio_codebooks,
-                    )
-                    for segment in sample
-                ]
-            ),
+        return tokenize_segments_with_loss_mask(
+            self.samples[idx],
+            n_audio_codebooks=self.n_audio_codebooks,
+            mask_speaker_ids=self.mask_speaker_ids,
+            max_audio_length_ms=self.max_audio_length_ms,
         )
-
-        tokens = mx.concatenate(tokens_list, axis=0)
-        masks = mx.concatenate(masks_list, axis=0)
-        loss_masks = mx.ones_like(tokens)
-
-        token_position = 0
-        for sep_token, segment in zip(tokens_list, sample):
-            segment_length = sep_token.shape[0]
-
-            if segment.speaker in self.mask_speaker_ids:
-                loss_masks[token_position : token_position + segment_length] = 0
-
-            token_position += segment_length
-
-        # Apply maximum length constraint if specified
-        if self.max_audio_length_ms is not None:
-            max_tokens = int(self.max_audio_length_ms / 80)
-            tokens = tokens[:max_tokens]
-            masks = masks[:max_tokens]
-            loss_masks = loss_masks[:max_tokens]
-
-        return tokens, masks, loss_masks
 
     def get_batch(self, indices: List[int]) -> Dict[str, mx.array]:
         """Get a batch of samples."""
@@ -153,4 +121,252 @@ class CSMDataset:
             "tokens": mx.stack(padded_tokens),
             "masks": mx.stack(padded_masks),
             "loss_masks": mx.stack(padded_loss_masks),
+        }
+
+
+class CSMPairwiseDataset:
+    """Dataset of paired conversations: each example has a ‘chosen’ and a ‘rejected’ conversations."""
+
+    def __init__(
+        self,
+        pairs: List[Tuple[List[Segment], List[Segment]]],
+        n_audio_codebooks: int = 32,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
+    ):
+        self.pairs = pairs
+        self.n_audio_codebooks = n_audio_codebooks
+        self.max_audio_length_ms = max_audio_length_ms
+        self.mask_speaker_ids = (
+            mask_speaker_ids
+            if isinstance(mask_speaker_ids, list)
+            else [mask_speaker_ids]
+            if mask_speaker_ids is not None
+            else []
+        )
+
+    @classmethod
+    def from_json(
+        cls,
+        json_path: str,
+        n_audio_codebooks: int = 32,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
+    ) -> "CSMPairwiseDataset":
+        """
+        Load dataset from a JSON file with format:
+        [
+            {
+                "chosen": [
+                    {"text": "...", "audio_path": "...", "speaker": 0},
+                    ...
+                ],
+                "rejected": [
+                    {"text": "...", "audio_path": "...", "speaker": 1},
+                    ...
+                ]
+            },
+            ...
+        ]
+        """
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        pairs: List[Tuple[List[Segment], List[Segment]]] = []
+        for item in data:
+            chosen_segs = [
+                Segment(
+                    text=seg["text"],
+                    audio_path=Path(seg["audio_path"]),
+                    speaker=seg.get("speaker", 0),
+                )
+                for seg in item["chosen"]
+            ]
+            rejected_segs = [
+                Segment(
+                    text=seg["text"],
+                    audio_path=Path(seg["audio_path"]),
+                    speaker=seg.get("speaker", 0),
+                )
+                for seg in item["rejected"]
+            ]
+            pairs.append((chosen_segs, rejected_segs))
+
+        return cls(pairs, n_audio_codebooks, max_audio_length_ms, mask_speaker_ids)
+
+    def __len__(self) -> int:
+        return len(self.pairs)
+
+    def __getitem__(self, idx: int) -> Dict[str, Tuple[mx.array, mx.array, mx.array]]:
+        chosen_segs, rejected_segs = self.pairs[idx]
+
+        return {
+            "chosen": tokenize_segments_with_loss_mask(
+                chosen_segs,
+                n_audio_codebooks=self.n_audio_codebooks,
+                mask_speaker_ids=self.mask_speaker_ids,
+                max_audio_length_ms=self.max_audio_length_ms,
+            ),
+            "rejected": tokenize_segments_with_loss_mask(
+                rejected_segs,
+                n_audio_codebooks=self.n_audio_codebooks,
+                mask_speaker_ids=self.mask_speaker_ids,
+                max_audio_length_ms=self.max_audio_length_ms,
+            ),
+        }
+
+    def get_batch(self, indices: List[int]) -> Dict[str, Dict[str, mx.array]]:
+        batch = {
+            "chosen": {"tokens": [], "masks": [], "loss_masks": []},
+            "rejected": {"tokens": [], "masks": [], "loss_masks": []},
+        }
+
+        for i in indices:
+            ex = self[i]
+            for key in ("chosen", "rejected"):
+                token, mask, loss_mask = ex[key]
+                batch[key]["tokens"].append(token)
+                batch[key]["masks"].append(mask)
+                batch[key]["loss_masks"].append(loss_mask)
+
+        all_lengths = []
+        for key in ("chosen", "rejected"):
+            all_lengths += [token.shape[0] for token in batch[key]["tokens"]]
+        max_len = max(all_lengths)
+
+        out: Dict[str, Dict[str, mx.array]] = {}
+        for key in ("chosen", "rejected"):
+            tokens = batch[key]["tokens"]
+            masks = batch[key]["masks"]
+            loss_masks = batch[key]["loss_masks"]
+
+            padded_tokens, padded_masks, padded_loss_masks = [], [], []
+            for token, mask, loss_mask in zip(tokens, masks, loss_masks):
+                pad = max_len - token.shape[0]
+                if pad > 0:
+                    padded_tokens.append(
+                        mx.pad(token, [(0, pad), (0, 0)], constant_values=0)
+                    )
+                    padded_masks.append(
+                        mx.pad(mask, [(0, pad), (0, 0)], constant_values=0)
+                    )
+                    padded_loss_masks.append(
+                        mx.pad(loss_mask, [(0, pad), (0, 0)], constant_values=0)
+                    )
+                else:
+                    padded_tokens.append(token)
+                    padded_masks.append(mask)
+                    padded_loss_masks.append(loss_mask)
+
+            out[key] = {
+                "tokens": mx.stack(padded_tokens),
+                "masks": mx.stack(padded_masks),
+                "loss_masks": mx.stack(padded_loss_masks),
+            }
+
+        return out
+
+
+class CSMPointwiseDataset:
+    """Dataset of single conversations + a preference (+1 for chosen, -1 for rejected)."""
+
+    def __init__(
+        self,
+        entries: List[Tuple[List[Segment], int]],
+        n_audio_codebooks: int = 32,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
+    ):
+        self.entries = entries
+        self.n_audio_codebooks = n_audio_codebooks
+        self.max_audio_length_ms = max_audio_length_ms
+        self.mask_speaker_ids = (
+            mask_speaker_ids
+            if isinstance(mask_speaker_ids, list)
+            else [mask_speaker_ids]
+            if mask_speaker_ids is not None
+            else []
+        )
+
+    @classmethod
+    def from_json(
+        cls,
+        json_path: str,
+        n_audio_codebooks: int = 32,
+        max_audio_length_ms: Optional[int] = None,
+        mask_speaker_ids: Optional[int | List[int]] = None,
+    ) -> "CSMPointwiseDataset":
+        """
+        Load dataset from a JSON file with format:
+        [
+            {
+                "segments": [
+                    {"text": "...", "audio_path": "...", "speaker": 0},
+                    ...
+                ],
+                "preference": 1
+            },
+            ...
+        ]
+        """
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        entries: List[Tuple[List[Segment], int]] = []
+        for item in data:
+            segments = [
+                Segment(
+                    text=seg["text"],
+                    audio_path=Path(seg["audio_path"]),
+                    speaker=seg.get("speaker", 0),
+                )
+                for seg in item["segments"]
+            ]
+            preference = int(item["preference"])
+            entries.append((segments, preference))
+
+        return cls(entries, n_audio_codebooks, max_audio_length_ms, mask_speaker_ids)
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array, int]:
+        segments, label = self.entries[idx]
+
+        return *tokenize_segments_with_loss_mask(
+            segments,
+            n_audio_codebooks=self.n_audio_codebooks,
+            mask_speaker_ids=self.mask_speaker_ids,
+            max_audio_length_ms=self.max_audio_length_ms,
+        ), label
+
+    def get_batch(self, indices: List[int]) -> Dict[str, mx.array]:
+        batch_tokens, batch_masks, batch_loss_masks, batch_preferences = [], [], [], []
+        for i in indices:
+            token, mask, loss_mask, preference = self[i]
+            batch_tokens.append(token)
+            batch_masks.append(mask)
+            batch_loss_masks.append(loss_mask)
+            batch_preferences.append(preference)
+
+        max_len = max(t.shape[0] for t in batch_tokens)
+        padded_tokens, padded_masks, padded_loss_masks = [], [], []
+        for t, m, lm in zip(batch_tokens, batch_masks, batch_loss_masks):
+            pad = max_len - t.shape[0]
+            if pad:
+                padded_tokens.append(mx.pad(t, [(0, pad), (0, 0)], constant_values=0))
+                padded_masks.append(mx.pad(m, [(0, pad), (0, 0)], constant_values=0))
+                padded_loss_masks.append(
+                    mx.pad(lm, [(0, pad), (0, 0)], constant_values=0)
+                )
+            else:
+                padded_tokens.append(t)
+                padded_masks.append(m)
+                padded_loss_masks.append(lm)
+
+        return {
+            "tokens": mx.stack(padded_tokens),
+            "masks": mx.stack(padded_masks),
+            "loss_masks": mx.stack(padded_loss_masks),
+            "preferences": mx.array(batch_preferences, dtype=mx.int32),
         }
