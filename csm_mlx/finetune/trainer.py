@@ -187,7 +187,9 @@ class CSMTrainer:
         self._step_fn = None
 
     @staticmethod
-    def compute_loss(model: CSM, batch: Dict[str, mx.array]) -> mx.array:
+    def compute_loss(
+        model: CSM, batch: Dict[str, mx.array], *, per_sample: bool = False
+    ) -> mx.array:
         """Compute loss for a batch of samples."""
         tokens = batch["tokens"]
         masks = batch["masks"]
@@ -252,11 +254,20 @@ class CSMTrainer:
             shifted_audio_tokens[:, :, 0].reshape(-1),
             reduction="none",
         )
-        c0_loss = (
-            (c0_loss * shifted_audio_loss_masks[:, :, 0].reshape(-1)).sum()
-            / shifted_audio_loss_masks[:, :, 0].sum()
-            * first_codebook_weight_multiplier
-        )
+        if per_sample:
+            c0_loss = (
+                (
+                    c0_loss.reshape(batch_size, -1) * shifted_audio_loss_masks[:, :, 0]
+                ).sum(-1)
+                / shifted_audio_loss_masks[:, :, 0].sum(-1)
+                * first_codebook_weight_multiplier
+            )
+        else:
+            c0_loss = (
+                (c0_loss * shifted_audio_loss_masks[:, :, 0].reshape(-1)).sum()
+                / shifted_audio_loss_masks[:, :, 0].sum()
+                * first_codebook_weight_multiplier
+            )
 
         total_loss = c0_loss / model.n_audio_codebooks
 
@@ -269,9 +280,15 @@ class CSMTrainer:
                 shifted_audio_tokens[:, :, index].reshape(-1),
                 reduction="none",
             )
-            ci_loss = (
-                ci_loss * shifted_audio_loss_masks[:, :, index].reshape(-1)
-            ).sum() / shifted_audio_loss_masks[:, :, index].sum()
+            if per_sample:
+                ci_loss = (
+                    ci_loss.reshape(batch_size, -1)
+                    * shifted_audio_loss_masks[:, :, index]
+                ).sum(-1) / shifted_audio_loss_masks[:, :, index].sum(-1)
+            else:
+                ci_loss = (
+                    ci_loss * shifted_audio_loss_masks[:, :, index].reshape(-1)
+                ).sum() / shifted_audio_loss_masks[:, :, index].sum()
             total_loss += ci_loss / model.n_audio_codebooks
 
         return total_loss
@@ -297,7 +314,7 @@ class CSMTrainer:
             if self.args.max_norm > 0:
 
                 @partial(mx.compile, inputs=state, outputs=state)
-                def _step(batch: Dict[str, mx.array]):
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
                     loss, grads = loss_and_grad_fn(
                         self.model,
                         {
@@ -316,7 +333,7 @@ class CSMTrainer:
             else:
 
                 @partial(mx.compile, inputs=state, outputs=state)
-                def _step(batch: Dict[str, mx.array]):
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
                     loss, grads = loss_and_grad_fn(
                         self.model,
                         {
