@@ -1,0 +1,43 @@
+# requirements.txt
+
+# --- Core ML Frameworks ---
+# MLX components (for streaming inference)
+mlx>=0.10.0
+mlx-lm>=0.10.0
+
+# PyTorch components (required for LoRA training, maybe some base scripts)
+torch==2.6.0
+torchaudio==2.6.0
+
+# --- Hugging Face Ecosystem ---
+transformers==4.49.0 # Strictest from LoRA reqs
+tokenizers==0.21.0 # Strictest from LoRA reqs
+huggingface_hub==0.28.1 # Strictest from LoRA reqs
+safetensors>=0.4.0 # Strictest minimum from MLX/Base reqs
+accelerate>=0.20.0 # Strictest minimum from Base reqs
+datasets>=2.12.0 # From Base reqs
+
+# --- Audio Processing & STT ---
+# Note: Includes both whisper and faster-whisper as they appeared in different files/contexts
+whisper>=1.0.0 # From Base reqs
+faster-whisper # Used in streaming script
+ctranslate2 # Dependency for faster-whisper
+tiktoken # Dependency for faster-whisper
+sounddevice # Used in streaming script
+soundfile>=0.12.0 # From Base reqs
+librosa>=0.10.0 # From Base reqs
+audiofile>=0.4.0 # From Base reqs
+audresample>=0.1.0 # From Base reqs
+
+# --- Utilities ---
+numpy>=1.26.0 # Strictest minimum from MLX reqs
+tqdm # From LoRA reqs (progress bars)
+wandb # From LoRA reqs (Optional, for experiment tracking)
+sentencepiece>=0.1.99 # Strictest minimum from MLX/Base reqs
+protobuf>=3.20.0 # From Base reqs
+matplotlib>=3.7.0 # From Base reqs
+tensorboard>=2.12.0 # From Base reqs
+scikit-learn>=1.2.0 # From Base reqs
+
+# --- Project Specific CSM / LoRA ---
+moshi==0.2.2 # From LoRA reqs
