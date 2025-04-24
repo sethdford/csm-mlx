@@ -20,6 +20,7 @@ Or, you can install it via pip:
 pip install git+https://github.com/senstella/csm-mlx --upgrade
 ```
 
+Make sure to use Python < 3.13. It tends to have `sentencepiece` compiler error.
 
 ## Usage
 
@@ -178,6 +179,8 @@ def read_audio(audio_path, sampling_rate=24000) -> mx.array:
 ## CLI
 
 ### Installation
+
+> If you're having `sentencepiece` error on uv, please try adding `--python 3.12` flag on the `uv tool install` command.
 
 ```bash
 # Recommendation: uv tools - works best!

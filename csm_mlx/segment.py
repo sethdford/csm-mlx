@@ -26,7 +26,8 @@ class Segment:
             return self._audio
         elif self.audio_path is not None:
             return read_audio(self.audio_path, SAMPLING_RATE)
-        return None
+
+        raise ValueError("Neither 'audio' nor 'audio_path' is provided")
 
     @audio.setter
     def audio(self, value):

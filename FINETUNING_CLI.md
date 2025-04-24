@@ -3,7 +3,7 @@
 ## Full Finetuning
 
 ```
-csm_mlx.cli.finetune full [OPTIONS]
+csm-mlx finetune full [OPTIONS]
 ```
 
 ### Options
@@ -37,7 +37,7 @@ csm_mlx.cli.finetune full [OPTIONS]
 ### Example
 
 ```bash
-python -m csm_mlx.cli.finetune full \
+csm-mlx finetune full \
     --data-path training_data.json \
     --output-dir ./finetune_output_full \
     --model 1b \
@@ -49,7 +49,7 @@ python -m csm_mlx.cli.finetune full \
 ## LoRA Finetuning
 
 ```
-csm_mlx.cli.finetune lora [OPTIONS]
+csm-mlx finetune lora [OPTIONS]
 ```
 
 ### Options
@@ -88,7 +88,7 @@ csm_mlx.cli.finetune lora [OPTIONS]
 ### Example
 
 ```bash
-python -m csm_mlx.cli.finetune lora \
+csm-mlx finetune lora \
     --data-path training_data.json \
     --output-dir ./finetune_output_lora \
     --model 1b \
@@ -141,7 +141,7 @@ Load `final_model.safetensors` directly into your CSM model for inference.
 ### Helper command for converting folder style dataset
 
 ```
-csm_mlx.cli.finetune convert <INPUT_DIR> <OUTPUT_JSON>
+csm-mlx finetune convert <INPUT_DIR> <OUTPUT_JSON>
 ```
 
 #### Arguments
@@ -179,5 +179,5 @@ my_raw_dataset/                <-- input_dir
 #### Example
 
 ```bash
-python -m csm_mlx.cli.finetune convert ./my_audio_dataset ./training_data.json
+csm-mlx finetune convert ./my_audio_dataset ./training_data.json
 ```
