@@ -124,7 +124,7 @@ class CSMDataset:
         }
 
 
-class CSMPairwiseDataset:
+class CSMPairwiseDataset(CSMDataset):
     """Dataset of paired conversations: each example has a ‘chosen’ and a ‘rejected’ conversations."""
 
     def __init__(
@@ -197,7 +197,7 @@ class CSMPairwiseDataset:
     def __len__(self) -> int:
         return len(self.pairs)
 
-    def __getitem__(self, idx: int) -> Dict[str, Tuple[mx.array, mx.array, mx.array]]:
+    def __getitem__(self, idx: int) -> Dict[str, Tuple[mx.array, mx.array, mx.array]]:  # type: ignore
         chosen_segs, rejected_segs = self.pairs[idx]
 
         return {
@@ -215,30 +215,34 @@ class CSMPairwiseDataset:
             ),
         }
 
-    def get_batch(self, indices: List[int]) -> Dict[str, Dict[str, mx.array]]:
+    def get_batch(self, indices: List[int]) -> Dict[str, mx.array]:
         batch = {
-            "chosen": {"tokens": [], "masks": [], "loss_masks": []},
-            "rejected": {"tokens": [], "masks": [], "loss_masks": []},
+            "chosen_tokens": [],
+            "rejected_tokens": [],
+            "chosen_masks": [],
+            "rejected_masks": [],
+            "chosen_loss_masks": [],
+            "rejected_loss_masks": [],
         }
 
         for i in indices:
             ex = self[i]
             for key in ("chosen", "rejected"):
                 token, mask, loss_mask = ex[key]
-                batch[key]["tokens"].append(token)
-                batch[key]["masks"].append(mask)
-                batch[key]["loss_masks"].append(loss_mask)
+                batch[f"{key}_tokens"].append(token)
+                batch[f"{key}_masks"].append(mask)
+                batch[f"{key}_loss_masks"].append(loss_mask)
 
         all_lengths = []
         for key in ("chosen", "rejected"):
-            all_lengths += [token.shape[0] for token in batch[key]["tokens"]]
+            all_lengths += [token.shape[0] for token in batch[f"{key}_tokens"]]
         max_len = max(all_lengths)
 
-        out: Dict[str, Dict[str, mx.array]] = {}
+        out: Dict[str, mx.array] = {}
         for key in ("chosen", "rejected"):
-            tokens = batch[key]["tokens"]
-            masks = batch[key]["masks"]
-            loss_masks = batch[key]["loss_masks"]
+            tokens = batch[f"{key}_tokens"]
+            masks = batch[f"{key}_masks"]
+            loss_masks = batch[f"{key}_loss_masks"]
 
             padded_tokens, padded_masks, padded_loss_masks = [], [], []
             for token, mask, loss_mask in zip(tokens, masks, loss_masks):
@@ -258,16 +262,16 @@ class CSMPairwiseDataset:
                     padded_masks.append(mask)
                     padded_loss_masks.append(loss_mask)
 
-            out[key] = {
-                "tokens": mx.stack(padded_tokens),
-                "masks": mx.stack(padded_masks),
-                "loss_masks": mx.stack(padded_loss_masks),
+            out = {
+                f"{key}_tokens": mx.stack(padded_tokens),
+                f"{key}_masks": mx.stack(padded_masks),
+                f"{key}_loss_masks": mx.stack(padded_loss_masks),
             }
 
         return out
 
 
-class CSMPointwiseDataset:
+class CSMPointwiseDataset(CSMDataset):
     """Dataset of single conversations + a preference (+1 for chosen, -1 for rejected)."""
 
     def __init__(
@@ -330,7 +334,7 @@ class CSMPointwiseDataset:
     def __len__(self) -> int:
         return len(self.entries)
 
-    def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array, int]:
+    def __getitem__(self, idx: int) -> Tuple[mx.array, mx.array, mx.array, int]:  # type: ignore
         segments, label = self.entries[idx]
 
         return *tokenize_segments_with_loss_mask(

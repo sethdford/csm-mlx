@@ -13,7 +13,7 @@ from mlx.utils import tree_flatten
 from mlx_lm.tuner.trainer import grad_checkpoint
 from tqdm import tqdm
 
-from csm_mlx.finetune.dataset import CSMDataset
+from csm_mlx.finetune.dataset import CSMDataset, CSMPairwiseDataset
 from csm_mlx.models import CSM
 
 
@@ -28,6 +28,19 @@ class TrainArgs:
     log_freq: int = 1
     ckpt_freq: int = 1
     only_save_trainable_params: bool = False
+
+
+@dataclass
+class DPOArgs(TrainArgs):
+    beta: float = 0.1
+
+
+@dataclass
+class KTOArgs(TrainArgs):
+    reference_model: CSM | None = None
+    beta: float = 0.1
+    desirable_weight: float = 1.0
+    undesirable_weight: float = 1.0
 
 
 @dataclass
@@ -188,7 +201,12 @@ class CSMTrainer:
 
     @staticmethod
     def compute_loss(
-        model: CSM, batch: Dict[str, mx.array], *, per_sample: bool = False
+        model: CSM,
+        batch: Dict[str, mx.array],
+        *,
+        per_sample: bool = False,
+        cause_mismatch: bool = False,
+        **kwargs,
     ) -> mx.array:
         """Compute loss for a batch of samples."""
         tokens = batch["tokens"]
@@ -249,6 +267,12 @@ class CSMTrainer:
         shifted_audio_loss_masks = mx.logical_and(
             shifted_audio_masks, shifted_audio_loss_masks
         )
+
+        if cause_mismatch:
+            shifted_audio_tokens = mx.concat(
+                [shifted_audio_tokens[:, 1:], shifted_audio_tokens[:, :1]], axis=1
+            )
+
         c0_loss = cross_entropy(
             c0_logits.reshape(-1, c0_logits.shape[-1]),
             shifted_audio_tokens[:, :, 0].reshape(-1),
@@ -455,3 +479,281 @@ class CSMTrainer:
             self.checkpointer.save()
 
         return self.history
+
+
+class DPOTrainer(CSMTrainer):
+    def __init__(self, args: DPOArgs):
+        if not isinstance(args, DPOArgs):
+            raise TypeError(
+                "Please use `DPOArgs` instead of other trainer's arguments."
+            )
+
+        super().__init__(args)
+        self.beta = args.beta
+
+    @staticmethod
+    def compute_loss(model: CSM, batch: Dict[str, mx.array], **kwargs) -> mx.array:
+        beta = batch["beta"]
+        fcw = batch["first_codebook_weight_multiplier"]
+
+        chosen = {
+            "tokens": batch["chosen_tokens"],
+            "masks": batch["chosen_masks"],
+            "loss_masks": batch["chosen_loss_masks"],
+        }
+        rejected = {
+            "tokens": batch["rejected_tokens"],
+            "masks": batch["rejected_masks"],
+            "loss_masks": batch["rejected_loss_masks"],
+        }
+
+        chosen_loss = CSMTrainer.compute_loss(
+            model,
+            {
+                **chosen,
+                "first_codebook_weight_multiplier": fcw,
+            },
+            per_sample=True,
+        )
+        rejected_loss = CSMTrainer.compute_loss(
+            model,
+            {
+                **rejected,
+                "first_codebook_weight_multiplier": fcw,
+            },
+            per_sample=True,
+        )
+
+        margin = -(chosen_loss - rejected_loss) * beta
+        return mx.mean(-nn.log_sigmoid(margin))
+
+    def train_step(self, batch: Dict[str, mx.array]) -> float:
+        model = self.model
+        optimizer = self.optimizer
+        first_codebook_weight_multiplier = mx.array(
+            self.args.first_codebook_weight_multiplier
+        )
+        beta = mx.array(self.beta, dtype=mx.float32)
+
+        state = [
+            model.state,
+            optimizer.state,
+            mx.random.state,
+        ]
+
+        if self._step_fn is None:
+            loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)  # type: ignore
+
+            if self.args.max_norm > 0:
+
+                @partial(mx.compile, inputs=state, outputs=state)
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
+                    loss, grads = loss_and_grad_fn(
+                        self.model,
+                        {
+                            **batch,
+                            "first_codebook_weight_multiplier": first_codebook_weight_multiplier,
+                            "beta": beta,
+                        },
+                    )
+
+                    grads, norm = optim.clip_grad_norm(grads, self.args.max_norm)
+
+                    optimizer.update(model, grads)
+
+                    return loss, norm
+
+                self._step_fn = _step
+            else:
+
+                @partial(mx.compile, inputs=state, outputs=state)
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
+                    loss, grads = loss_and_grad_fn(
+                        self.model,
+                        {
+                            **batch,
+                            "first_codebook_weight_multiplier": first_codebook_weight_multiplier,
+                            "beta": beta,
+                        },
+                    )
+
+                    optimizer.update(model, grads)
+
+                    return loss, 0
+
+                self._step_fn = _step
+
+        loss, norm = self._step_fn(batch)
+
+        mx.eval(loss, norm, state)
+
+        return float(loss)
+
+    def train(
+        self,
+        dataset: CSMDataset,
+        batch_size: int,
+        epochs: int,
+        shuffle: bool = True,
+    ):
+        if not isinstance(dataset, CSMPairwiseDataset):
+            raise TypeError(
+                "Please use `CSMPairwiseDataset` instead of other dataset types."
+            )
+        return super().train(dataset, batch_size, epochs, shuffle)
+
+
+class KTOTrainer(CSMTrainer):
+    def __init__(self, args: KTOArgs):
+        if not isinstance(args, KTOArgs):
+            raise TypeError(
+                "Please use `KTOArgs` instead of other trainer's arguments."
+            )
+
+        if args.reference_model is None:
+            raise ValueError("Reference model must be provided.")
+
+        super().__init__(args)
+        self.beta = args.beta
+        self.desirable_weight = args.desirable_weight
+        self.undesirable_weight = args.undesirable_weight
+        self.reference_model = args.reference_model
+
+        self.reference_model.eval()
+
+    @staticmethod
+    def compute_loss(model: CSM, batch: Dict[str, mx.array], **kwargs) -> mx.array:
+        beta = batch["beta"]
+        fcw = batch["first_codebook_weight_multiplier"]
+        desirable_weight = batch["desirable_weight"]
+        undesirable_weight = batch["undesirable_weight"]
+
+        preference = batch["preference"]
+
+        kl_reference = batch["kl_reference"]
+        kl_policy = batch["kl_policy"]
+
+        reference = batch["reference"]
+        policy = CSMTrainer.compute_loss(
+            model,
+            {
+                **batch,
+                "first_codebook_weight_multiplier": fcw,
+            },
+            per_sample=True,
+        )
+
+        reward = policy - reference
+        kl = mx.clip((kl_policy - kl_reference).mean(), 0, None)
+
+        penalized_reward = reward - kl
+
+        desirable_mask = preference > 0
+        desirable_losses = (
+            desirable_weight
+            * desirable_mask
+            * (1 - mx.sigmoid(beta * penalized_reward))
+        )
+
+        undesirable_mask = preference < 0
+        undesirable_losses = (
+            undesirable_weight
+            * undesirable_mask
+            * (1 - mx.sigmoid(-beta * penalized_reward))
+        )
+
+        total_losses = desirable_losses + undesirable_losses
+
+        return total_losses.mean()
+
+    def train_step(self, batch: Dict[str, mx.array]) -> float:  # type: ignore[override]
+        model = self.model
+        optimizer = self.optimizer
+        first_codebook_weight_multiplier = mx.array(
+            self.args.first_codebook_weight_multiplier
+        )
+        beta = mx.array(self.beta, dtype=mx.float32)
+        desirable_weight = mx.array(self.desirable_weight, dtype=mx.float32)
+        undesirable_weight = mx.array(self.undesirable_weight, dtype=mx.float32)
+
+        state = [
+            model.state,
+            optimizer.state,
+            mx.random.state,
+        ]
+
+        batch = {
+            **batch,
+            "first_codebook_weight_multiplier": first_codebook_weight_multiplier,
+        }
+
+        if self._step_fn is None:
+            loss_and_grad_fn = nn.value_and_grad(self.model, self.compute_loss)  # type: ignore
+
+            if self.args.max_norm > 0:
+
+                @partial(mx.compile, inputs=state, outputs=state)
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
+                    loss, grads = loss_and_grad_fn(self.model, batch)
+
+                    grads, norm = optim.clip_grad_norm(grads, self.args.max_norm)
+
+                    optimizer.update(model, grads)
+
+                    return loss, norm
+
+                self._step_fn = _step
+            else:
+
+                @partial(mx.compile, inputs=state, outputs=state)
+                def _step(batch: Dict[str, mx.array]):  # type: ignore
+                    loss, grads = loss_and_grad_fn(self.model, batch)
+
+                    optimizer.update(model, grads)
+
+                    return loss, 0
+
+                self._step_fn = _step
+
+        # Some kl and ref calculation
+        kl_reference = CSMTrainer.compute_loss(
+            self.reference_model, batch, per_sample=True, cause_mismatch=True
+        )
+        kl_policy = CSMTrainer.compute_loss(
+            model, batch, per_sample=True, cause_mismatch=True
+        )
+
+        reference = CSMTrainer.compute_loss(
+            self.reference_model,
+            batch,
+            per_sample=True,
+        )
+
+        loss, norm = self._step_fn(
+            {
+                **batch,
+                "kl_reference": kl_reference,
+                "kl_policy": kl_policy,
+                "reference": reference,
+                "beta": beta,
+                "desirable_weight": desirable_weight,
+                "undesirable_weight": undesirable_weight,
+            }
+        )
+
+        mx.eval(loss, norm, state)
+
+        return float(loss)
+
+    def train(
+        self,
+        dataset: CSMDataset,
+        batch_size: int,
+        epochs: int,
+        shuffle: bool = True,
+    ):
+        if not isinstance(dataset, CSMPairwiseDataset):
+            raise TypeError(
+                "Please use `CSMPairwiseDataset` instead of other dataset types."
+            )
+        return super().train(dataset, batch_size, epochs, shuffle)
