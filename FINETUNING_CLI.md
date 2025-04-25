@@ -3,7 +3,7 @@
 ## Full Finetuning
 
 ```
-csm-mlx finetune full [OPTIONS]
+csm-mlx finetune full sft [OPTIONS]
 ```
 
 ### Options
@@ -22,7 +22,7 @@ csm-mlx finetune full [OPTIONS]
 - `--mask-speaker-ids LIST`: Comma-separated speaker IDs to ignore in loss
   - Pretty similar to masking user's turn when training LLM. Makes it won't train on the voice you don't want.
 - `--max-norm FLOAT`: Gradient clipping norm (0.0 disables clipping)
-- `--first_codebook_weight_multiplier FLOAT`: Weight multiplier for first codebook
+- `--first-codebook-weight-multiplier FLOAT`: Weight multiplier for first codebook
   - First codebook computed by backbone, rest computed by decoder!
 - `--ckpt_freq INT`: Save checkpoint every N steps
 - `--log-freq INT`: Log metrics every N steps
@@ -49,7 +49,7 @@ csm-mlx finetune full \
 ## LoRA Finetuning
 
 ```
-csm-mlx finetune lora [OPTIONS]
+csm-mlx finetune lora sft [OPTIONS]
 ```
 
 ### Options
@@ -72,7 +72,7 @@ csm-mlx finetune lora [OPTIONS]
 - `--mask-speaker-ids LIST`: Comma-separated speaker IDs to ignore in loss
   - Pretty similar to masking user's turn when training LLM. Makes it won't train on the voice you don't want.
 - `--max-norm FLOAT`: Gradient clipping norm
-- `--first_codebook_weight_multiplier FLOAT`: Weight multiplier for first codebook
+- `--first-codebook-weight-multiplier FLOAT`: Weight multiplier for first codebook
   - First codebook computed by backbone, rest computed by decoder!
 - `--ckpt_freq INT`: Save checkpoint every N steps
 - `--log-freq INT`: Log metrics every N steps
@@ -149,7 +149,7 @@ csm-mlx finetune convert <INPUT_DIR> <OUTPUT_JSON>
 - `INPUT_DIR`: Directory containing conversation subdirectories
 - `OUTPUT_JSON`: Path for output JSON file
 
-> The script sorts the audio files within each conversation directory using a natural_sort_key. This means it tries to sort filenames containing numbers intelligently (e.g., 1, 2, 10 instead of 1, 10, 2). To ensure your utterances are processed in the correct conversational order, it's highly recommended to prefix your filenames with a sequence number. Also, all filenames must include `speaker{n}_` such in way you can see in the example for correct speaker identification!
+> The script sorts the audio files within each conversation directory using a natural_sort_key. This means it tries to sort filenames containing numbers intelligently (e.g., 1, 2, 10 instead of 1, 10, 2). To ensure your utterances are processed in the correct conversational order, it's highly recommended to prefix your filenames with a sequence number. Also, all filenames must include `speaker{n}` such in way you can see in the example for correct speaker identification!
 
 #### Directory Structure
 
