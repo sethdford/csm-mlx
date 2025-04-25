@@ -694,7 +694,30 @@ class KTOTrainer(CSMTrainer):
 
                 @partial(mx.compile, inputs=state, outputs=state)
                 def _step(batch: Dict[str, mx.array]):  # type: ignore
-                    loss, grads = loss_and_grad_fn(self.model, batch)
+                    kl_reference = CSMTrainer.compute_loss(
+                        self.reference_model,
+                        batch,
+                        per_sample=True,
+                        cause_mismatch=True,
+                    )
+                    kl_policy = CSMTrainer.compute_loss(
+                        model, batch, per_sample=True, cause_mismatch=True
+                    )
+
+                    reference = CSMTrainer.compute_loss(
+                        self.reference_model,
+                        batch,
+                        per_sample=True,
+                    )
+                    loss, grads = loss_and_grad_fn(
+                        self.model,
+                        {
+                            **batch,
+                            "kl_reference": kl_reference,
+                            "kl_policy": kl_policy,
+                            "reference": reference,
+                        },
+                    )
 
                     grads, norm = optim.clip_grad_norm(grads, self.args.max_norm)
 
@@ -707,7 +730,30 @@ class KTOTrainer(CSMTrainer):
 
                 @partial(mx.compile, inputs=state, outputs=state)
                 def _step(batch: Dict[str, mx.array]):  # type: ignore
-                    loss, grads = loss_and_grad_fn(self.model, batch)
+                    kl_reference = CSMTrainer.compute_loss(
+                        self.reference_model,
+                        batch,
+                        per_sample=True,
+                        cause_mismatch=True,
+                    )
+                    kl_policy = CSMTrainer.compute_loss(
+                        model, batch, per_sample=True, cause_mismatch=True
+                    )
+
+                    reference = CSMTrainer.compute_loss(
+                        self.reference_model,
+                        batch,
+                        per_sample=True,
+                    )
+                    loss, grads = loss_and_grad_fn(
+                        self.model,
+                        {
+                            **batch,
+                            "kl_reference": kl_reference,
+                            "kl_policy": kl_policy,
+                            "reference": reference,
+                        },
+                    )
 
                     optimizer.update(model, grads)
 
@@ -715,26 +761,9 @@ class KTOTrainer(CSMTrainer):
 
                 self._step_fn = _step
 
-        # Some kl and ref calculation
-        kl_reference = CSMTrainer.compute_loss(
-            self.reference_model, batch, per_sample=True, cause_mismatch=True
-        )
-        kl_policy = CSMTrainer.compute_loss(
-            model, batch, per_sample=True, cause_mismatch=True
-        )
-
-        reference = CSMTrainer.compute_loss(
-            self.reference_model,
-            batch,
-            per_sample=True,
-        )
-
         loss, norm = self._step_fn(
             {
                 **batch,
-                "kl_reference": kl_reference,
-                "kl_policy": kl_policy,
-                "reference": reference,
                 "beta": beta,
                 "desirable_weight": desirable_weight,
                 "undesirable_weight": undesirable_weight,
