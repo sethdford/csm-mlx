@@ -262,11 +262,9 @@ class CSMPairwiseDataset(CSMDataset):
                     padded_masks.append(mask)
                     padded_loss_masks.append(loss_mask)
 
-            out = {
-                f"{key}_tokens": mx.stack(padded_tokens),
-                f"{key}_masks": mx.stack(padded_masks),
-                f"{key}_loss_masks": mx.stack(padded_loss_masks),
-            }
+            out[f"{key}_tokens"] = mx.stack(padded_tokens)
+            out[f"{key}_masks"] = mx.stack(padded_masks)
+            out[f"{key}_loss_masks"] = mx.stack(padded_loss_masks)
 
         return out
 
