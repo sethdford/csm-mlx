@@ -7,4 +7,8 @@ app = typer.Typer(no_args_is_help=True)
 
 
 app.add_typer(generate_app)
-app.add_typer(finetune_app, name="finetune")
+app.add_typer(
+    finetune_app,
+    name="finetune",
+    help="Finetuning module for CSM(Conversation Speech Model).",
+)
